@@ -1,4 +1,4 @@
-import type { Game, Player, PlayerAction, Route, TrainCard } from '../model/types';
+import type { DestinationTicket, Game, Player, PlayerAction, Route, TrainCard } from '../model/types';
 import {
   createInitialBoard,
   createSampleDestinationDeck,
