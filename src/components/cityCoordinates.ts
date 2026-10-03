@@ -1,0 +1,43 @@
+export interface CityCoordinate {
+  x: number;
+  y: number;
+}
+
+export const CITY_COORDINATES: Record<string, CityCoordinate> = {
+  vancouver: { x: 75, y: 45 },
+  seattle: { x: 80, y: 95 },
+  portland: { x: 65, y: 155 },
+  san_francisco: { x: 50, y: 325 },
+  los_angeles: { x: 105, y: 450 },
+  calgary: { x: 250, y: 55 },
+  helena: { x: 290, y: 165 },
+  salt_lake_city: { x: 220, y: 275 },
+  las_vegas: { x: 180, y: 400 },
+  phoenix: { x: 210, y: 485 },
+  denver: { x: 370, y: 315 },
+  santa_fe: { x: 350, y: 425 },
+  el_paso: { x: 340, y: 540 },
+  winnipeg: { x: 480, y: 55 },
+  duluth: { x: 560, y: 180 },
+  omaha: { x: 510, y: 290 },
+  kansas_city: { x: 540, y: 355 },
+  oklahoma_city: { x: 480, y: 445 },
+  dallas: { x: 510, y: 535 },
+  houston: { x: 550, y: 595 },
+  sault_ste_marie: { x: 670, y: 140 },
+  chicago: { x: 640, y: 270 },
+  saint_louis: { x: 610, y: 365 },
+  little_rock: { x: 580, y: 460 },
+  new_orleans: { x: 640, y: 580 },
+  toronto: { x: 770, y: 200 },
+  pittsburgh: { x: 780, y: 280 },
+  nashville: { x: 710, y: 400 },
+  atlanta: { x: 760, y: 450 },
+  miami: { x: 850, y: 610 },
+  montreal: { x: 870, y: 110 },
+  boston: { x: 940, y: 180 },
+  new_york: { x: 880, y: 240 },
+  washington: { x: 850, y: 320 },
+  raleigh: { x: 830, y: 375 },
+  charleston: { x: 860, y: 450 },
+};
