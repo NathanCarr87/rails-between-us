@@ -1,4 +1,4 @@
-import type { Game, Player, Route, TrainCard } from '../model/types';
+import type { DestinationTicket, Game, Player, PlayerAction, Route, TrainCard } from '../model/types';
 import {
   createInitialBoard,
   createSampleDestinationDeck,
@@ -359,4 +359,71 @@ export function calculatePlayerScore(player: Player, routes: Record<string, Rout
     }
   }
   return score;
+}
+
+export function executeDrawTrainCardsTurn(
+  game: Game,
+  playerId: string,
+  count: number = 2
+): Game {
+  if (game.currentPlayerId !== playerId) {
+    throw new Error(`Cannot draw train cards: Not player ${playerId}'s turn.`);
+  }
+
+  const gameWithDrawnCards = drawTrainCards(game, playerId, count);
+  return advanceTurn(gameWithDrawnCards);
+}
+
+export function executeClaimRouteTurn(
+  game: Game,
+  playerId: string,
+  routeId: string,
+  cardsToUse: TrainCard[]
+): Game {
+  // claimRoute already validates turn and advances turn
+  return claimRoute(game, playerId, routeId, cardsToUse);
+}
+
+export function executeDrawDestinationTicketsTurn(
+  game: Game,
+  playerId: string,
+  count: number = 3
+): Game {
+  if (game.currentPlayerId !== playerId) {
+    throw new Error(`Cannot draw destination tickets: Not player ${playerId}'s turn.`);
+  }
+
+  const { game: updatedGame, drawnTickets } = drawDestinationTickets(game, playerId, count);
+  const player = updatedGame.players[playerId];
+
+  const updatedPlayer: Player = {
+    ...player,
+    destinationTickets: [...player.destinationTickets, ...drawnTickets],
+  };
+
+  const gameWithTickets: Game = {
+    ...updatedGame,
+    players: {
+      ...updatedGame.players,
+      [playerId]: updatedPlayer,
+    },
+    updatedAt: Date.now(),
+  };
+
+  return advanceTurn(gameWithTickets);
+}
+
+export function executeTurnAction(game: Game, playerId: string, action: PlayerAction): Game {
+  switch (action.type) {
+    case 'DRAW_TRAIN_CARDS':
+      return executeDrawTrainCardsTurn(game, playerId, action.count ?? 2);
+    case 'CLAIM_ROUTE':
+      return executeClaimRouteTurn(game, playerId, action.routeId, action.cardsToUse);
+    case 'DRAW_DESTINATION_TICKETS':
+      return executeDrawDestinationTicketsTurn(game, playerId, action.count ?? 3);
+    default: {
+      const _exhaustiveCheck: never = action;
+      throw new Error(`Unhandled action type: ${JSON.stringify(_exhaustiveCheck)}`);
+    }
+  }
 }

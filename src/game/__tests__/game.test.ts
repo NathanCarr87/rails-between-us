@@ -8,6 +8,7 @@ import {
   claimRoute,
   createGame,
   drawTrainCards,
+  executeTurnAction,
   MAX_PLAYERS,
 } from '../state/gameEngine';
 import type { TrainCard } from '../model/types';
@@ -178,6 +179,89 @@ describe('Game Domain Model & Rules', () => {
     expect(cost).toEqual({
       length: 4,
       colorRequirement: 'green',
+    });
+  });
+
+  describe('Player Turn Actions & Turn Advancement', () => {
+    it('draws 2 train cards and advances turn', () => {
+      let game = createGame();
+      game = addPlayer(game, { playerId: 'p1', displayName: 'Alice', color: 'red' });
+      game = addPlayer(game, { playerId: 'p2', displayName: 'Bob', color: 'blue' });
+
+      expect(game.currentPlayerId).toBe('p1');
+      const p1InitialCardCount = game.players.p1.trainCards.length;
+      const initialDeckCount = game.trainCardDeck.length;
+
+      game = executeTurnAction(game, 'p1', { type: 'DRAW_TRAIN_CARDS' });
+
+      expect(game.players.p1.trainCards.length).toBe(p1InitialCardCount + 2);
+      expect(game.trainCardDeck.length).toBe(initialDeckCount - 2);
+      expect(game.currentPlayerId).toBe('p2');
+      expect(game.turnNumber).toBe(2);
+    });
+
+    it('claims a route and advances turn', () => {
+      let game = createGame();
+      game = addPlayer(game, { playerId: 'p1', displayName: 'Alice', color: 'red' });
+      game = addPlayer(game, { playerId: 'p2', displayName: 'Bob', color: 'blue' });
+
+      const redCards: TrainCard[] = [
+        { id: 'c1', color: 'red' },
+        { id: 'c2', color: 'red' },
+      ];
+      game.players.p1.trainCards = [...redCards];
+      const routeId = 'route_boston_new_york_red';
+
+      game = executeTurnAction(game, 'p1', {
+        type: 'CLAIM_ROUTE',
+        routeId,
+        cardsToUse: redCards,
+      });
+
+      expect(game.boardState.routes[routeId].ownerPlayerId).toBe('p1');
+      expect(game.players.p1.claimedRoutes).toContain(routeId);
+      expect(game.currentPlayerId).toBe('p2');
+      expect(game.turnNumber).toBe(2);
+    });
+
+    it('draws destination tickets and advances turn', () => {
+      let game = createGame();
+      game = addPlayer(game, { playerId: 'p1', displayName: 'Alice', color: 'red' });
+      game = addPlayer(game, { playerId: 'p2', displayName: 'Bob', color: 'blue' });
+
+      expect(game.currentPlayerId).toBe('p1');
+      const initialTicketDeckCount = game.destinationTicketDeck.length;
+
+      game = executeTurnAction(game, 'p1', { type: 'DRAW_DESTINATION_TICKETS' });
+
+      expect(game.players.p1.destinationTickets.length).toBe(3);
+      expect(game.destinationTicketDeck.length).toBe(initialTicketDeckCount - 3);
+      expect(game.currentPlayerId).toBe('p2');
+      expect(game.turnNumber).toBe(2);
+    });
+
+    it('throws error when performing action out of turn', () => {
+      let game = createGame();
+      game = addPlayer(game, { playerId: 'p1', displayName: 'Alice', color: 'red' });
+      game = addPlayer(game, { playerId: 'p2', displayName: 'Bob', color: 'blue' });
+
+      expect(game.currentPlayerId).toBe('p1');
+
+      expect(() => {
+        executeTurnAction(game, 'p2', { type: 'DRAW_TRAIN_CARDS' });
+      }).toThrow(/Not player p2's turn/);
+
+      expect(() => {
+        executeTurnAction(game, 'p2', { type: 'DRAW_DESTINATION_TICKETS' });
+      }).toThrow(/Not player p2's turn/);
+
+      expect(() => {
+        executeTurnAction(game, 'p2', {
+          type: 'CLAIM_ROUTE',
+          routeId: 'route_boston_new_york_red',
+          cardsToUse: [{ id: 'c1', color: 'red' }, { id: 'c2', color: 'red' }],
+        });
+      }).toThrow(/Not this player turn/);
     });
   });
 });
