@@ -67,6 +67,8 @@ export interface Game {
   trainCardDiscardPile: TrainCard[];
   destinationTicketDeck: DestinationTicket[];
   destinationTicketDiscardPile: DestinationTicket[];
+  isFinalRound?: boolean;
+  finalRoundTriggeredBy?: string | null;
   createdAt: number;
   updatedAt: number;
 }

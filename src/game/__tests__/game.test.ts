@@ -264,4 +264,108 @@ describe('Game Domain Model & Rules', () => {
       }).toThrow(/Not this player turn/);
     });
   });
+
+  describe('End-Game Trigger & Completion Logic', () => {
+    it('triggers final round when a player has 2 or fewer trains remaining', () => {
+      let game = createGame();
+      game = addPlayer(game, { playerId: 'p1', displayName: 'Alice', color: 'red' });
+      game = addPlayer(game, { playerId: 'p2', displayName: 'Bob', color: 'blue' });
+      game = addPlayer(game, { playerId: 'p3', displayName: 'Charlie', color: 'green' });
+
+      // Simulate p1 having 2 trains remaining
+      game.players.p1.trainsRemaining = 2;
+
+      expect(game.isFinalRound).toBe(false);
+
+      // p1 completes an action (draws train cards)
+      game = executeTurnAction(game, 'p1', { type: 'DRAW_TRAIN_CARDS' });
+
+      // Final round should now be triggered
+      expect(game.isFinalRound).toBe(true);
+      expect(game.finalRoundTriggeredBy).toBe('p1');
+      expect(game.status).toBe('active');
+      expect(game.currentPlayerId).toBe('p2'); // Turn moves to p2
+    });
+
+    it('allows every other player exactly one final turn before marking game completed', () => {
+      let game = createGame();
+      game = addPlayer(game, { playerId: 'p1', displayName: 'Alice', color: 'red' });
+      game = addPlayer(game, { playerId: 'p2', displayName: 'Bob', color: 'blue' });
+      game = addPlayer(game, { playerId: 'p3', displayName: 'Charlie', color: 'green' });
+
+      // p1 triggers final round
+      game.players.p1.trainsRemaining = 1;
+      game = executeTurnAction(game, 'p1', { type: 'DRAW_TRAIN_CARDS' });
+
+      expect(game.isFinalRound).toBe(true);
+      expect(game.finalRoundTriggeredBy).toBe('p1');
+      expect(game.currentPlayerId).toBe('p2');
+
+      // p2 takes their final turn
+      game = executeTurnAction(game, 'p2', { type: 'DRAW_TRAIN_CARDS' });
+      expect(game.status).toBe('active');
+      expect(game.currentPlayerId).toBe('p3');
+
+      // p3 takes their final turn
+      game = executeTurnAction(game, 'p3', { type: 'DRAW_TRAIN_CARDS' });
+
+      // Now all other players have taken their final turn and it wraps back to p1
+      expect(game.status).toBe('completed');
+      expect(game.currentPlayerId).toBeNull();
+    });
+
+    it('calculates final scores including destination tickets when game finishes', () => {
+      let game = createGame();
+      game = addPlayer(game, { playerId: 'p1', displayName: 'Alice', color: 'red' });
+      game = addPlayer(game, { playerId: 'p2', displayName: 'Bob', color: 'blue' });
+
+      // Setup p1 destination tickets and claimed routes
+      // Ticket 1: Boston -> Washington (8 pts) - COMPLETED
+      // Ticket 2: Boston -> Miami (12 pts) - INCOMPLETE (-12 pts)
+      game.players.p1.destinationTickets = [
+        { id: 't1', cityA: 'boston', cityB: 'washington', points: 8 },
+        { id: 't2', cityA: 'boston', cityB: 'miami', points: 12 },
+      ];
+
+      // Route 1: Boston -> New York (length 2, 2 pts)
+      // Route 2: New York -> Washington (length 2, 2 pts)
+      game.players.p1.claimedRoutes = ['route_boston_new_york_red', 'route_new_york_washington_orange'];
+      game.players.p1.score = 4; // 2 + 2 from route claims during game
+      game.boardState.routes['route_boston_new_york_red'].ownerPlayerId = 'p1';
+      game.boardState.routes['route_new_york_washington_orange'].ownerPlayerId = 'p1';
+
+      // Setup p2 destination tickets: Completed ticket (7 pts)
+      game.players.p2.destinationTickets = [
+        { id: 't3', cityA: 'atlanta', cityB: 'charleston', points: 2 },
+      ];
+      game.players.p2.claimedRoutes = ['route_atlanta_charleston_any']; // length 2 (2 pts)
+      game.players.p2.score = 2;
+      game.boardState.routes['route_atlanta_charleston_any'].ownerPlayerId = 'p2';
+
+      // p1 triggers final round
+      game.players.p1.trainsRemaining = 0;
+      game = executeTurnAction(game, 'p1', { type: 'DRAW_TRAIN_CARDS' });
+
+      expect(game.status).toBe('active');
+      expect(game.currentPlayerId).toBe('p2');
+
+      // p2 takes final turn
+      game = executeTurnAction(game, 'p2', { type: 'DRAW_TRAIN_CARDS' });
+
+      // Game is now completed
+      expect(game.status).toBe('completed');
+
+      // Check p1 final score:
+      // Route points: 4
+      // Tickets: +8 (boston->washington completed) -12 (boston->miami incomplete) = -4
+      // Total final score = 4 + (-4) = 0
+      expect(game.players.p1.score).toBe(0);
+
+      // Check p2 final score:
+      // Route points: 2
+      // Tickets: +2 (atlanta->charleston completed)
+      // Total final score = 2 + 2 = 4
+      expect(game.players.p2.score).toBe(4);
+    });
+  });
 });

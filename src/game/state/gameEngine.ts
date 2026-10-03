@@ -26,6 +26,8 @@ export function createGame(gameId: string = 'game_' + Date.now()): Game {
     trainCardDiscardPile: [],
     destinationTicketDeck: createSampleDestinationDeck(),
     destinationTicketDiscardPile: [],
+    isFinalRound: false,
+    finalRoundTriggeredBy: null,
     createdAt: now,
     updatedAt: now,
   };
@@ -77,18 +79,57 @@ export function addPlayer(
 }
 
 export function advanceTurn(game: Game): Game {
-  if (game.playerOrder.length === 0) {
+  if (game.status === 'completed' || game.playerOrder.length === 0) {
     return game;
+  }
+
+  let isFinalRound = game.isFinalRound ?? false;
+  let finalRoundTriggeredBy = game.finalRoundTriggeredBy ?? null;
+
+  // Check if current active player triggers final round (trainsRemaining <= 2)
+  if (!isFinalRound && game.currentPlayerId) {
+    const activePlayer = game.players[game.currentPlayerId];
+    if (activePlayer && activePlayer.trainsRemaining <= 2) {
+      isFinalRound = true;
+      finalRoundTriggeredBy = game.currentPlayerId;
+    }
   }
 
   const currentIndex = game.currentPlayerId ? game.playerOrder.indexOf(game.currentPlayerId) : -1;
   const nextIndex = (currentIndex + 1) % game.playerOrder.length;
   const nextPlayerId = game.playerOrder[nextIndex];
 
+  // If final round was triggered and we have looped back to the player who triggered it
+  if (isFinalRound && nextPlayerId === finalRoundTriggeredBy) {
+    const finalPlayers: Record<string, Player> = {};
+    for (const pid of game.playerOrder) {
+      const p = game.players[pid];
+      if (p) {
+        finalPlayers[pid] = {
+          ...p,
+          score: calculateFinalPlayerScore(p, game.boardState.routes),
+        };
+      }
+    }
+
+    return {
+      ...game,
+      status: 'completed',
+      currentPlayerId: null,
+      isFinalRound: true,
+      finalRoundTriggeredBy,
+      players: finalPlayers,
+      turnNumber: game.turnNumber + 1,
+      updatedAt: Date.now(),
+    };
+  }
+
   return {
     ...game,
     currentPlayerId: nextPlayerId,
     turnNumber: game.turnNumber + 1,
+    isFinalRound,
+    finalRoundTriggeredBy,
     updatedAt: Date.now(),
   };
 }
