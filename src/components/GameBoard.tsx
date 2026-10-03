@@ -7,6 +7,7 @@ export interface GameBoardProps {
   players: Record<string, Player>;
   selectedRouteId?: string | null;
   onSelectRoute?: (routeId: string) => void;
+  onClaimRoute?: (routeId: string) => void;
 }
 
 const TRAIN_COLOR_HEX: Record<TrainColor | 'any', string> = {
@@ -26,6 +27,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({
   players,
   selectedRouteId,
   onSelectRoute,
+  onClaimRoute,
 }) => {
   const { cities, routes } = boardState;
 
@@ -38,6 +40,8 @@ export const GameBoard: React.FC<GameBoardProps> = ({
     }
     routeGroups[key].push(route.routeId);
   });
+
+  const selectedRoute = selectedRouteId ? routes[selectedRouteId] : null;
 
   return (
     <div style={styles.boardWrapper}>
@@ -98,7 +102,23 @@ export const GameBoard: React.FC<GameBoardProps> = ({
                 key={route.routeId}
                 onClick={() => onSelectRoute?.(route.routeId)}
                 style={{ cursor: onSelectRoute ? 'pointer' : 'default' }}
+                data-testid={`route-group-${route.routeId}`}
+                data-selected={isSelected}
               >
+                {/* Highlight layer when selected */}
+                {isSelected && (
+                  <line
+                    x1={startX}
+                    y1={startY}
+                    x2={endX}
+                    y2={endY}
+                    stroke="#dd6b20"
+                    strokeWidth={16}
+                    strokeLinecap="round"
+                    opacity={0.8}
+                  />
+                )}
+
                 {/* Background line / hit area */}
                 <line
                   x1={startX}
@@ -106,7 +126,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({
                   x2={endX}
                   y2={endY}
                   stroke={isSelected ? '#3182ce' : '#cbd5e0'}
-                  strokeWidth={isSelected ? 14 : 10}
+                  strokeWidth={isSelected ? 12 : 10}
                   strokeLinecap="round"
                   opacity={isSelected ? 0.9 : 0.6}
                 />
@@ -139,17 +159,17 @@ export const GameBoard: React.FC<GameBoardProps> = ({
                 {/* Route Length & Color Requirement Tag */}
                 <g transform={`translate(${(startX + endX) / 2}, ${(startY + endY) / 2})`}>
                   <circle
-                    r="8"
-                    fill={owner ? owner.color : '#ffffff'}
-                    stroke={isSelected ? '#2b6cb0' : routeColorHex}
-                    strokeWidth="2"
+                    r={isSelected ? '10' : '8'}
+                    fill={owner ? owner.color : isSelected ? '#feebc8' : '#ffffff'}
+                    stroke={isSelected ? '#dd6b20' : routeColorHex}
+                    strokeWidth={isSelected ? '3' : '2'}
                   />
                   <text
                     textAnchor="middle"
                     dy="3.5"
-                    fontSize="9"
+                    fontSize={isSelected ? '10' : '9'}
                     fontWeight="bold"
-                    fill={owner ? '#ffffff' : '#2d3748'}
+                    fill={owner ? '#ffffff' : isSelected ? '#7b341e' : '#2d3748'}
                   >
                     {route.length}
                   </text>
@@ -188,6 +208,56 @@ export const GameBoard: React.FC<GameBoardProps> = ({
           })}
         </g>
       </svg>
+
+      {/* Interactive Selected Route Action Panel */}
+      {selectedRoute && (
+        <div style={styles.selectedRouteBanner} data-testid="selected-route-panel">
+          <div style={styles.routeDetails}>
+            <span style={styles.routeCities}>
+              {cities[selectedRoute.cityA]?.name || selectedRoute.cityA} ↔{' '}
+              {cities[selectedRoute.cityB]?.name || selectedRoute.cityB}
+            </span>
+            <div style={styles.routeBadgeGroup}>
+              <span style={styles.badge} data-testid="selected-route-length">
+                Length: {selectedRoute.length}
+              </span>
+              <span
+                style={{
+                  ...styles.colorBadge,
+                  backgroundColor: TRAIN_COLOR_HEX[selectedRoute.colorRequirement],
+                  color:
+                    selectedRoute.colorRequirement === 'white' ||
+                    selectedRoute.colorRequirement === 'yellow' ||
+                    selectedRoute.colorRequirement === 'any'
+                      ? '#1a202c'
+                      : '#ffffff',
+                }}
+                data-testid="selected-route-color"
+              >
+                Color: {selectedRoute.colorRequirement.toUpperCase()}
+              </span>
+            </div>
+          </div>
+
+          <div>
+            {selectedRoute.ownerPlayerId ? (
+              <div style={styles.claimedBadge} data-testid="selected-route-owner">
+                Owned by {players[selectedRoute.ownerPlayerId]?.displayName || 'Player'}
+              </div>
+            ) : (
+              onClaimRoute && (
+                <button
+                  style={styles.claimBtn}
+                  onClick={() => onClaimRoute(selectedRoute.routeId)}
+                  data-testid="board-claim-route-btn"
+                >
+                  Claim Route
+                </button>
+              )
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -199,6 +269,9 @@ const styles: Record<string, React.CSSProperties> = {
     margin: '0 auto',
     boxSizing: 'border-box',
     overflow: 'hidden',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '12px',
   },
   svg: {
     width: '100%',
@@ -206,5 +279,65 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'block',
     borderRadius: '12px',
     boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+  },
+  selectedRouteBanner: {
+    display: 'flex',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: '12px 16px',
+    backgroundColor: '#ebf8ff',
+    border: '2px solid #3182ce',
+    borderRadius: '10px',
+    gap: '12px',
+  },
+  routeDetails: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '4px',
+  },
+  routeCities: {
+    fontSize: '16px',
+    fontWeight: 'bold',
+    color: '#2b6cb0',
+  },
+  routeBadgeGroup: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+  },
+  badge: {
+    fontSize: '13px',
+    fontWeight: '600',
+    color: '#2d3748',
+    backgroundColor: '#e2e8f0',
+    padding: '3px 8px',
+    borderRadius: '6px',
+  },
+  colorBadge: {
+    fontSize: '12px',
+    fontWeight: 'bold',
+    padding: '3px 8px',
+    borderRadius: '6px',
+    border: '1px solid rgba(0,0,0,0.15)',
+  },
+  claimedBadge: {
+    fontSize: '14px',
+    fontWeight: 'bold',
+    color: '#2f855a',
+    backgroundColor: '#c6f6d5',
+    padding: '6px 12px',
+    borderRadius: '8px',
+  },
+  claimBtn: {
+    padding: '8px 16px',
+    backgroundColor: '#3182ce',
+    color: '#ffffff',
+    border: 'none',
+    borderRadius: '8px',
+    fontWeight: 'bold',
+    fontSize: '14px',
+    cursor: 'pointer',
+    boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
   },
 };

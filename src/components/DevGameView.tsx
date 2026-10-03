@@ -68,20 +68,27 @@ export const DevGameView: React.FC = () => {
     }
   };
 
-  const handleClaimRoute = () => {
+  const handleClaimRoute = (routeIdToClaim?: string) => {
     setErrorMessage(null);
+    const targetRouteId = routeIdToClaim || selectedRouteId;
+
     if (!game.currentPlayerId) {
-      setErrorMessage('No active player.');
+      setErrorMessage('No active player. Please add players first.');
       return;
     }
-    if (!selectedRouteId) {
+    if (!targetRouteId) {
       setErrorMessage('Select a route to claim.');
       return;
     }
 
-    const route = game.boardState.routes[selectedRouteId];
+    const route = game.boardState.routes[targetRouteId];
     if (!route) {
       setErrorMessage('Invalid route.');
+      return;
+    }
+
+    if (route.ownerPlayerId) {
+      setErrorMessage('Route is already claimed.');
       return;
     }
 
@@ -91,14 +98,53 @@ export const DevGameView: React.FC = () => {
       return;
     }
 
-    // Find cards matching the selected card color (or locomotive)
+    if (currentPlayer.trainsRemaining < route.length) {
+      setErrorMessage(
+        `Player has only ${currentPlayer.trainsRemaining} trains left but route requires ${route.length}.`
+      );
+      return;
+    }
+
+    // Determine card color to use for the route
+    let requiredColor: CardColor = selectedCardColor;
+    if (route.colorRequirement !== 'any') {
+      requiredColor = route.colorRequirement;
+    } else {
+      // If specific card color selected has enough cards, use it; otherwise find a color with enough cards in hand
+      const colorCounts: Record<string, number> = {};
+      const locoCount = currentPlayer.trainCards.filter((c) => c.color === 'locomotive').length;
+
+      currentPlayer.trainCards.forEach((c) => {
+        if (c.color !== 'locomotive') {
+          colorCounts[c.color] = (colorCounts[c.color] || 0) + 1;
+        }
+      });
+
+      if ((colorCounts[selectedCardColor] || 0) + locoCount >= route.length) {
+        requiredColor = selectedCardColor;
+      } else {
+        // Find any color that meets the route length requirement
+        const suitableColor = Object.keys(colorCounts).find(
+          (col) => (colorCounts[col] || 0) + locoCount >= route.length
+        );
+        if (suitableColor) {
+          requiredColor = suitableColor as CardColor;
+        } else if (locoCount >= route.length) {
+          requiredColor = 'locomotive';
+        } else {
+          requiredColor = selectedCardColor;
+        }
+      }
+    }
+
+    // Find cards matching requiredColor or locomotive
     const matchingCards = currentPlayer.trainCards.filter(
-      (c) => c.color === selectedCardColor || c.color === 'locomotive'
+      (c) => c.color === requiredColor || c.color === 'locomotive'
     );
 
     if (matchingCards.length < route.length) {
       setErrorMessage(
-        `Player has only ${matchingCards.length} ${selectedCardColor}/locomotive card(s) but route requires ${route.length}.`
+        `Player has only ${matchingCards.length} ${requiredColor}/locomotive card(s) but route requires ${route.length}.`
       );
       return;
     }
@@ -106,7 +152,7 @@ export const DevGameView: React.FC = () => {
     const cardsToUse = matchingCards.slice(0, route.length);
 
     try {
-      const updatedGame = claimRoute(game, game.currentPlayerId, selectedRouteId, cardsToUse);
+      const updatedGame = claimRoute(game, game.currentPlayerId, targetRouteId, cardsToUse);
       setGame(updatedGame);
       setSelectedRouteId('');
     } catch (err: unknown) {
@@ -144,7 +190,11 @@ export const DevGameView: React.FC = () => {
           boardState={game.boardState}
           players={game.players}
           selectedRouteId={selectedRouteId}
-          onSelectRoute={(routeId) => setSelectedRouteId(routeId)}
+          onSelectRoute={(routeId) => {
+            setErrorMessage(null);
+            setSelectedRouteId(routeId);
+          }}
+          onClaimRoute={(routeId) => handleClaimRoute(routeId)}
         />
       </section>
 
@@ -195,6 +245,7 @@ export const DevGameView: React.FC = () => {
                   value={selectedRouteId}
                   onChange={(e) => setSelectedRouteId(e.target.value)}
                   style={styles.select}
+                  data-testid="route-select-dropdown"
                 >
                   <option value="">-- Click on map or choose route --</option>
                   {Object.values(game.boardState.routes).map((r) => {
@@ -213,7 +264,7 @@ export const DevGameView: React.FC = () => {
               </div>
 
               {selectedRoute && (
-                <div style={styles.selectedRouteInfo}>
+                <div style={styles.selectedRouteInfo} data-testid="selected-route-info">
                   <strong>Selected:</strong> {game.boardState.cities[selectedRoute.cityA]?.name} ↔{' '}
                   {game.boardState.cities[selectedRoute.cityB]?.name} | Length: {selectedRoute.length} |
                   Color: {selectedRoute.colorRequirement}
@@ -237,7 +288,11 @@ export const DevGameView: React.FC = () => {
                 </select>
               </div>
 
-              <button style={styles.btnPrimary} onClick={handleClaimRoute}>
+              <button
+                style={styles.btnPrimary}
+                onClick={() => handleClaimRoute()}
+                data-testid="claim-route-control-btn"
+              >
                 Claim Selected Route
               </button>
             </div>
