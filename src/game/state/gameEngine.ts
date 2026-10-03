@@ -5,6 +5,7 @@ import {
   createSampleTrainDeck,
   getPointsForRouteLength,
   INITIAL_TRAINS_PER_PLAYER,
+  shuffleDeck,
 } from '../rules/defaults';
 
 export const MAX_PLAYERS = 6;
@@ -201,6 +202,40 @@ export function claimRoute(
   return advanceTurn(updatedGame);
 }
 
+export function discardTrainCards(
+  game: Game,
+  playerId: string,
+  cardsToDiscard: TrainCard[]
+): Game {
+  const player = game.players[playerId];
+  if (!player) {
+    throw new Error(`Player ${playerId} does not exist.`);
+  }
+
+  const discardCardIds = new Set(cardsToDiscard.map((c) => c.id));
+  const updatedPlayerCards = player.trainCards.filter((c) => !discardCardIds.has(c.id));
+
+  // Verify that all cards to discard were in the player's hand
+  if (player.trainCards.length - updatedPlayerCards.length !== cardsToDiscard.length) {
+    throw new Error('Some specified cards were not found in player hand.');
+  }
+
+  const updatedPlayer: Player = {
+    ...player,
+    trainCards: updatedPlayerCards,
+  };
+
+  return {
+    ...game,
+    players: {
+      ...game.players,
+      [playerId]: updatedPlayer,
+    },
+    trainCardDiscardPile: [...game.trainCardDiscardPile, ...cardsToDiscard],
+    updatedAt: Date.now(),
+  };
+}
+
 export function drawTrainCards(game: Game, playerId: string, count: number = 2): Game {
   const player = game.players[playerId];
   if (!player) {
@@ -218,7 +253,7 @@ export function drawTrainCards(game: Game, playerId: string, count: number = 2):
         break; // No cards left to draw
       }
       // Reshuffle discard into deck
-      deck = [...discard];
+      deck = shuffleDeck(discard);
       discard = [];
     }
     const card = deck.pop();
