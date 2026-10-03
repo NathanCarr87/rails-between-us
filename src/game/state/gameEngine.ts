@@ -1,4 +1,5 @@
 import type { DestinationTicket, Game, Player, PlayerAction, Route, TrainCard } from '../model/types';
+export type { DestinationTicket } from '../model/types';
 import {
   createInitialBoard,
   createSampleDestinationDeck,
@@ -350,7 +351,87 @@ export function selectDestinationTickets(
   };
 }
 
-export function calculatePlayerScore(player: Player, routes: Record<string, Route>): number {
+export function areCitiesConnected(
+  cityA: string,
+  cityB: string,
+  claimedRouteIds: string[],
+  routes: Record<string, Route>
+): boolean {
+  if (cityA === cityB) {
+    return true;
+  }
+
+  // Build adjacency list for claimed routes
+  const adj = new Map<string, Set<string>>();
+
+  for (const routeId of claimedRouteIds) {
+    const route = routes[routeId];
+    if (!route) continue;
+
+    if (!adj.has(route.cityA)) adj.set(route.cityA, new Set());
+    if (!adj.has(route.cityB)) adj.set(route.cityB, new Set());
+
+    adj.get(route.cityA)!.add(route.cityB);
+    adj.get(route.cityB)!.add(route.cityA);
+  }
+
+  if (!adj.has(cityA) || !adj.has(cityB)) {
+    return false;
+  }
+
+  // BFS traversal
+  const queue: string[] = [cityA];
+  const visited = new Set<string>([cityA]);
+
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    if (current === cityB) {
+      return true;
+    }
+
+    const neighbors = adj.get(current);
+    if (neighbors) {
+      for (const neighbor of neighbors) {
+        if (!visited.has(neighbor)) {
+          visited.add(neighbor);
+          queue.push(neighbor);
+        }
+      }
+    }
+  }
+
+  return false;
+}
+
+export function isTicketCompleted(
+  ticket: DestinationTicket,
+  claimedRouteIds: string[],
+  routes: Record<string, Route>
+): boolean {
+  return areCitiesConnected(ticket.cityA, ticket.cityB, claimedRouteIds, routes);
+}
+
+export function calculateDestinationTicketScore(
+  tickets: DestinationTicket[],
+  claimedRouteIds: string[],
+  routes: Record<string, Route>
+): number {
+  let ticketScore = 0;
+  for (const ticket of tickets) {
+    if (isTicketCompleted(ticket, claimedRouteIds, routes)) {
+      ticketScore += ticket.points;
+    } else {
+      ticketScore -= ticket.points;
+    }
+  }
+  return ticketScore;
+}
+
+export function calculatePlayerScore(
+  player: Player,
+  routes: Record<string, Route>,
+  includeDestinationTickets: boolean = true
+): number {
   let score = 0;
   for (const routeId of player.claimedRoutes) {
     const route = routes[routeId];
@@ -358,7 +439,23 @@ export function calculatePlayerScore(player: Player, routes: Record<string, Rout
       score += getPointsForRouteLength(route.length);
     }
   }
+
+  if (includeDestinationTickets) {
+    score += calculateDestinationTicketScore(
+      player.destinationTickets,
+      player.claimedRoutes,
+      routes
+    );
+  }
+
   return score;
+}
+
+export function calculateFinalPlayerScore(
+  player: Player,
+  routes: Record<string, Route>
+): number {
+  return calculatePlayerScore(player, routes, true);
 }
 
 export function executeDrawTrainCardsTurn(
