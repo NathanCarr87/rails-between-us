@@ -3,6 +3,7 @@ import {
   addPlayer,
   advanceTurn,
   calculatePlayerScore,
+  calculateRouteCost,
   canClaimRoute,
   claimRoute,
   createGame,
@@ -161,5 +162,22 @@ describe('Game Domain Model & Rules', () => {
 
     const score = calculatePlayerScore(player, routes);
     expect(score).toBe(9); // 2 pts for length 2 + 7 pts for length 4
+  });
+
+  it('calculates route cost correctly', () => {
+    const route = {
+      routeId: 'route_cd_green',
+      cityA: 'city_c',
+      cityB: 'city_d',
+      length: 4,
+      colorRequirement: 'green' as const,
+      ownerPlayerId: null,
+    };
+
+    const cost = calculateRouteCost(route);
+    expect(cost).toEqual({
+      length: 4,
+      colorRequirement: 'green',
+    });
   });
 });
