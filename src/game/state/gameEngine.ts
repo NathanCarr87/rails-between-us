@@ -279,6 +279,77 @@ export function drawTrainCards(game: Game, playerId: string, count: number = 2):
   };
 }
 
+export interface DrawDestinationTicketsResult {
+  game: Game;
+  drawnTickets: DestinationTicket[];
+}
+
+export function drawDestinationTickets(
+  game: Game,
+  playerId: string,
+  count: number = 3
+): DrawDestinationTicketsResult {
+  const player = game.players[playerId];
+  if (!player) {
+    throw new Error(`Player ${playerId} does not exist.`);
+  }
+
+  const deck = [...game.destinationTicketDeck];
+  const drawnTickets: DestinationTicket[] = [];
+
+  for (let i = 0; i < count; i++) {
+    if (deck.length === 0) {
+      break;
+    }
+    const ticket = deck.pop();
+    if (ticket) {
+      drawnTickets.push(ticket);
+    }
+  }
+
+  const updatedGame: Game = {
+    ...game,
+    destinationTicketDeck: deck,
+    updatedAt: Date.now(),
+  };
+
+  return {
+    game: updatedGame,
+    drawnTickets,
+  };
+}
+
+export function selectDestinationTickets(
+  game: Game,
+  playerId: string,
+  keptTickets: DestinationTicket[],
+  unselectedTickets: DestinationTicket[]
+): Game {
+  const player = game.players[playerId];
+  if (!player) {
+    throw new Error(`Player ${playerId} does not exist.`);
+  }
+
+  // Update player tickets
+  const updatedPlayer: Player = {
+    ...player,
+    destinationTickets: [...player.destinationTickets, ...keptTickets],
+  };
+
+  // Return unselected tickets to the bottom of the destination ticket deck
+  const updatedDeck = [...unselectedTickets, ...game.destinationTicketDeck];
+
+  return {
+    ...game,
+    players: {
+      ...game.players,
+      [playerId]: updatedPlayer,
+    },
+    destinationTicketDeck: updatedDeck,
+    updatedAt: Date.now(),
+  };
+}
+
 export function calculatePlayerScore(player: Player, routes: Record<string, Route>): number {
   let score = 0;
   for (const routeId of player.claimedRoutes) {

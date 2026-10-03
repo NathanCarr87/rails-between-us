@@ -956,19 +956,45 @@ export function createSampleTrainDeck(): TrainCard[] {
   return createStandardTrainDeck(true);
 }
 
-export function createSampleDestinationDeck(): DestinationTicket[] {
-  return [
-    { id: 'ticket_1', cityA: 'los_angeles', cityB: 'new_york', points: 21 },
-    { id: 'ticket_2', cityA: 'duluth', cityB: 'houston', points: 8 },
-    { id: 'ticket_3', cityA: 'sault_ste_marie', cityB: 'nashville', points: 8 },
-    { id: 'ticket_4', cityA: 'new_york', cityB: 'atlanta', points: 6 },
-    { id: 'ticket_5', cityA: 'portland', cityB: 'phoenix', points: 11 },
-    { id: 'ticket_6', cityA: 'vancouver', cityB: 'montreal', points: 20 },
-    { id: 'ticket_7', cityA: 'duluth', cityB: 'el_paso', points: 10 },
-    { id: 'ticket_8', cityA: 'toronto', cityB: 'miami', points: 10 },
-    { id: 'ticket_9', cityA: 'portland', cityB: 'nashville', points: 17 },
-    { id: 'ticket_10', cityA: 'san_francisco', cityB: 'atlanta', points: 17 },
+export function createStandardDestinationDeck(shuffle: boolean = true): DestinationTicket[] {
+  const tickets: DestinationTicket[] = [
+    { id: 'ticket_denver_el_paso', cityA: 'denver', cityB: 'el_paso', points: 4 },
+    { id: 'ticket_kansas_city_houston', cityA: 'kansas_city', cityB: 'houston', points: 5 },
+    { id: 'ticket_new_york_atlanta', cityA: 'new_york', cityB: 'atlanta', points: 6 },
+    { id: 'ticket_chicago_new_orleans', cityA: 'chicago', cityB: 'new_orleans', points: 7 },
+    { id: 'ticket_calgary_phoenix', cityA: 'calgary', cityB: 'phoenix', points: 7 },
+    { id: 'ticket_duluth_el_paso', cityA: 'duluth', cityB: 'el_paso', points: 10 },
+    { id: 'ticket_duluth_houston', cityA: 'duluth', cityB: 'houston', points: 8 },
+    { id: 'ticket_sault_ste_marie_nashville', cityA: 'sault_ste_marie', cityB: 'nashville', points: 8 },
+    { id: 'ticket_sault_ste_marie_oklahoma_city', cityA: 'sault_ste_marie', cityB: 'oklahoma_city', points: 9 },
+    { id: 'ticket_chicago_santa_fe', cityA: 'chicago', cityB: 'santa_fe', points: 9 },
+    { id: 'ticket_toronto_miami', cityA: 'toronto', cityB: 'miami', points: 10 },
+    { id: 'ticket_portland_phoenix', cityA: 'portland', cityB: 'phoenix', points: 11 },
+    { id: 'ticket_dallas_new_york', cityA: 'dallas', cityB: 'new_york', points: 11 },
+    { id: 'ticket_denver_pittsburgh', cityA: 'denver', cityB: 'pittsburgh', points: 11 },
+    { id: 'ticket_seattle_oklahoma_city', cityA: 'seattle', cityB: 'oklahoma_city', points: 9 },
+    { id: 'ticket_seattle_los_angeles', cityA: 'seattle', cityB: 'los_angeles', points: 9 },
+    { id: 'ticket_helena_los_angeles', cityA: 'helena', cityB: 'los_angeles', points: 8 },
+    { id: 'ticket_miami_calgary', cityA: 'calgary', cityB: 'miami', points: 18 },
+    { id: 'ticket_montreal_atlanta', cityA: 'montreal', cityB: 'atlanta', points: 9 },
+    { id: 'ticket_montreal_new_orleans', cityA: 'montreal', cityB: 'new_orleans', points: 13 },
+    { id: 'ticket_los_angeles_chicago', cityA: 'los_angeles', cityB: 'chicago', points: 16 },
+    { id: 'ticket_los_angeles_miami', cityA: 'los_angeles', cityB: 'miami', points: 20 },
+    { id: 'ticket_los_angeles_new_york', cityA: 'los_angeles', cityB: 'new_york', points: 21 },
+    { id: 'ticket_portland_nashville', cityA: 'portland', cityB: 'nashville', points: 17 },
+    { id: 'ticket_san_francisco_atlanta', cityA: 'san_francisco', cityB: 'atlanta', points: 17 },
+    { id: 'ticket_vancouver_montreal', cityA: 'vancouver', cityB: 'montreal', points: 20 },
+    { id: 'ticket_vancouver_santa_fe', cityA: 'vancouver', cityB: 'santa_fe', points: 13 },
+    { id: 'ticket_winnipeg_houston', cityA: 'winnipeg', cityB: 'houston', points: 12 },
+    { id: 'ticket_winnipeg_little_rock', cityA: 'winnipeg', cityB: 'little_rock', points: 11 },
+    { id: 'ticket_boston_miami', cityA: 'boston', cityB: 'miami', points: 12 },
   ];
+
+  return shuffle ? shuffleDeck(tickets) : tickets;
+}
+
+export function createSampleDestinationDeck(): DestinationTicket[] {
+  return createStandardDestinationDeck(true);
 }
 
 export const ROUTE_LENGTH_POINTS: Record<number, number> = {
