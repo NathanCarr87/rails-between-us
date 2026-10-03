@@ -70,3 +70,24 @@ export interface Game {
   createdAt: number;
   updatedAt: number;
 }
+
+export interface DrawTrainCardsAction {
+  type: 'DRAW_TRAIN_CARDS';
+  count?: number;
+}
+
+export interface ClaimRouteAction {
+  type: 'CLAIM_ROUTE';
+  routeId: string;
+  cardsToUse: TrainCard[];
+}
+
+export interface DrawDestinationTicketsAction {
+  type: 'DRAW_DESTINATION_TICKETS';
+  count?: number;
+}
+
+export type PlayerAction =
+  | DrawTrainCardsAction
+  | ClaimRouteAction
+  | DrawDestinationTicketsAction;
