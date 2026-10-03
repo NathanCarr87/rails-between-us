@@ -914,23 +914,46 @@ export function createInitialBoard(): BoardState {
   };
 }
 
-export function createSampleTrainDeck(): TrainCard[] {
-  const colors: TrainColor[] = ['red', 'blue', 'green', 'yellow', 'purple', 'orange', 'black', 'white'];
+export const STANDARD_TRAIN_COLORS: TrainColor[] = [
+  'red',
+  'blue',
+  'green',
+  'yellow',
+  'purple',
+  'orange',
+  'black',
+  'white',
+];
+
+export function shuffleDeck<T>(deck: T[]): T[] {
+  const shuffled = [...deck];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  return shuffled;
+}
+
+export function createStandardTrainDeck(shuffle: boolean = true): TrainCard[] {
   const deck: TrainCard[] = [];
   let cardId = 1;
 
-  for (const color of colors) {
+  for (const color of STANDARD_TRAIN_COLORS) {
     for (let i = 0; i < 12; i++) {
-      deck.push({ id: `card_${cardId++}`, color });
+      deck.push({ id: `train_card_${cardId++}`, color });
     }
   }
 
   // Locomotives / Wild cards
   for (let i = 0; i < 14; i++) {
-    deck.push({ id: `card_${cardId++}`, color: 'locomotive' });
+    deck.push({ id: `train_card_${cardId++}`, color: 'locomotive' });
   }
 
-  return deck;
+  return shuffle ? shuffleDeck(deck) : deck;
+}
+
+export function createSampleTrainDeck(): TrainCard[] {
+  return createStandardTrainDeck(true);
 }
 
 export function createSampleDestinationDeck(): DestinationTicket[] {
