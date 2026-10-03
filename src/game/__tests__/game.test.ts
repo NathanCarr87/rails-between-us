@@ -22,8 +22,8 @@ describe('Game Domain Model & Rules', () => {
     expect(game.playerOrder).toEqual([]);
     expect(game.currentPlayerId).toBeNull();
     expect(game.turnNumber).toBe(0);
-    expect(Object.keys(game.boardState.cities).length).toBeGreaterThan(0);
-    expect(Object.keys(game.boardState.routes).length).toBeGreaterThan(0);
+    expect(Object.keys(game.boardState.cities).length).toBe(36);
+    expect(Object.keys(game.boardState.routes).length).toBe(102);
     expect(game.trainCardDeck.length).toBeGreaterThan(0);
     expect(game.destinationTicketDeck.length).toBeGreaterThan(0);
   });
@@ -91,7 +91,7 @@ describe('Game Domain Model & Rules', () => {
     ];
     game.players.p1.trainCards = [...redCards];
 
-    const routeId = 'route_ab_red'; // requires 2 red cards
+    const routeId = 'route_boston_new_york_red'; // requires 2 red cards
     const route = game.boardState.routes[routeId];
     expect(route).toBeDefined();
 
@@ -115,7 +115,7 @@ describe('Game Domain Model & Rules', () => {
     game = addPlayer(game, { playerId: 'p1', displayName: 'Alice', color: 'red' });
     game = addPlayer(game, { playerId: 'p2', displayName: 'Bob', color: 'blue' });
 
-    const routeId = 'route_ab_red'; // length 2, color red
+    const routeId = 'route_boston_new_york_red'; // length 2, color red
 
     // Wrong player turn
     const resWrongTurn = canClaimRoute(game, 'p2', routeId, [{ id: 'c1', color: 'red' }, { id: 'c2', color: 'red' }]);
@@ -150,14 +150,14 @@ describe('Game Domain Model & Rules', () => {
       color: 'red',
       trainCards: [],
       destinationTickets: [],
-      claimedRoutes: ['route_ab_red', 'route_cd_green'], // length 2 and length 4
+      claimedRoutes: ['route_boston_new_york_red', 'route_denver_helena_green'], // length 2 and length 4
       trainsRemaining: 39,
       score: 9,
     };
 
     const routes = {
-      route_ab_red: { routeId: 'route_ab_red', cityA: 'a', cityB: 'b', length: 2, colorRequirement: 'red' as const, ownerPlayerId: 'p1' },
-      route_cd_green: { routeId: 'route_cd_green', cityA: 'c', cityB: 'd', length: 4, colorRequirement: 'green' as const, ownerPlayerId: 'p1' },
+      route_boston_new_york_red: { routeId: 'route_boston_new_york_red', cityA: 'boston', cityB: 'new_york', length: 2, colorRequirement: 'red' as const, ownerPlayerId: 'p1' },
+      route_denver_helena_green: { routeId: 'route_denver_helena_green', cityA: 'denver', cityB: 'helena', length: 4, colorRequirement: 'green' as const, ownerPlayerId: 'p1' },
     };
 
     const score = calculatePlayerScore(player, routes);
@@ -166,9 +166,9 @@ describe('Game Domain Model & Rules', () => {
 
   it('calculates route cost correctly', () => {
     const route = {
-      routeId: 'route_cd_green',
-      cityA: 'city_c',
-      cityB: 'city_d',
+      routeId: 'route_denver_helena_green',
+      cityA: 'denver',
+      cityB: 'helena',
       length: 4,
       colorRequirement: 'green' as const,
       ownerPlayerId: null,
