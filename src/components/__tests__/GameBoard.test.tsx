@@ -173,7 +173,7 @@ describe('GameBoard interactive route selection and claiming', () => {
 });
 
 describe('DevGameView interactive integration', () => {
-  it('renders lobby and transitions to playing phase when started', () => {
+  it('renders lobby and transitions to playing phase when started', async () => {
     render(<DevGameView />);
 
     // Initial setup form in lobby
@@ -185,6 +185,6 @@ describe('DevGameView interactive integration', () => {
     fireEvent.click(screen.getByTestId('create-game-btn'));
 
     // Active lobby rendered
-    expect(screen.getByTestId('lobby-active-container')).toBeDefined();
+    expect(await screen.findByTestId('lobby-active-container')).toBeDefined();
   });
 });

@@ -4,6 +4,7 @@ import {
   doc,
   setDoc,
   getDoc,
+  runTransaction,
   onSnapshot,
   type Firestore,
   type Unsubscribe,
@@ -27,8 +28,8 @@ const firebaseConfig = {
   appId: import.meta.env?.VITE_FIREBASE_APP_ID || '1:1029384756:web:abcdef123456',
 };
 
-let app: FirebaseApp;
-let db: Firestore;
+let app: FirebaseApp | undefined;
+let db: Firestore | undefined;
 
 try {
   app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
@@ -39,118 +40,419 @@ try {
 
 export { app, db };
 
+// In-memory cache & listeners for immediate sync & offline/test support
+const inMemoryGames = new Map<string, Game>();
+const inMemoryListeners = new Map<string, Set<(game: Game | null) => void>>();
+
+function saveLocalGame(gameId: string, game: Game | null): void {
+  try {
+    const key = `rails_game_${gameId}`;
+    const newValue = game ? JSON.stringify(game) : null;
+    if (newValue) {
+      localStorage.setItem(key, newValue);
+    } else {
+      localStorage.removeItem(key);
+    }
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new StorageEvent('storage', {
+          key,
+          newValue,
+        })
+      );
+    }
+  } catch (err) {
+    console.warn('Failed to save game to localStorage', err);
+  }
+}
+
+function getLocalGame(gameId: string): Game | null {
+  try {
+    const data = localStorage.getItem(`rails_game_${gameId}`);
+    return data ? JSON.parse(data) : null;
+  } catch {
+    return null;
+  }
+}
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('storage', (event) => {
+    if (event.key && event.key.startsWith('rails_game_')) {
+      const gameId = event.key.replace('rails_game_', '');
+      try {
+        const game = event.newValue ? (JSON.parse(event.newValue) as Game) : null;
+        if (game) {
+          inMemoryGames.set(gameId, game);
+        } else {
+          inMemoryGames.delete(gameId);
+        }
+        notifyMemoryListeners(gameId, game);
+      } catch {
+        // ignore parse errors
+      }
+    }
+  });
+}
+
+function notifyMemoryListeners(gameId: string, game: Game | null): void {
+  const listeners = inMemoryListeners.get(gameId);
+  if (listeners) {
+    listeners.forEach((cb) => cb(game));
+  }
+}
+
 /**
- * Creates a new game in Firestore or returns initialized local game if Firestore unavailable.
+ * Generates a clean 4-character short code for easy game sharing.
+ */
+export function generateGameCode(): string {
+  const chars = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
+  let code = '';
+  for (let i = 0; i < 4; i++) {
+    code += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return code;
+}
+
+/**
+ * Saves local player identity for a game in localStorage.
+ */
+export function savePlayerSession(gameId: string, playerId: string, playerName: string): void {
+  try {
+    localStorage.setItem(`rails_session_${gameId}`, JSON.stringify({ playerId, playerName, gameId }));
+    localStorage.setItem('rails_last_game_id', gameId);
+  } catch (err) {
+    console.warn('Failed to save session to localStorage', err);
+  }
+}
+
+/**
+ * Retrieves local player session for a given gameId or last active gameId.
+ */
+export function getPlayerSession(gameId?: string): { playerId: string; playerName: string; gameId: string } | null {
+  try {
+    const idToUse = gameId || localStorage.getItem('rails_last_game_id');
+    if (!idToUse) return null;
+    const data = localStorage.getItem(`rails_session_${idToUse}`);
+    return data ? JSON.parse(data) : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Clears local player session.
+ */
+export function clearPlayerSession(gameId?: string): void {
+  try {
+    if (gameId) {
+      localStorage.removeItem(`rails_session_${gameId}`);
+    }
+    localStorage.removeItem('rails_last_game_id');
+  } catch (err) {
+    console.warn('Failed to clear session from localStorage', err);
+  }
+}
+
+/**
+ * Creates a new game in Firestore.
  */
 export async function createGameInFirestore(
   gameId: string,
   hostPlayer: { playerId: string; displayName: string; color: string }
 ): Promise<Game> {
-  let game = createGame(gameId);
-  game = addPlayer(game, hostPlayer);
+  let initialGame = createGame(gameId);
+  initialGame = addPlayer(initialGame, hostPlayer);
+
+  inMemoryGames.set(gameId, initialGame);
+  saveLocalGame(gameId, initialGame);
+  notifyMemoryListeners(gameId, initialGame);
 
   if (db) {
-    const gameRef = doc(db, 'games', gameId);
-    await setDoc(gameRef, game);
+    try {
+      const gameRef = doc(db, 'games', gameId);
+      const snap = await getDoc(gameRef);
+
+      if (snap.exists()) {
+        const existingGame = snap.data() as Game;
+        if (existingGame.phase === 'playing') {
+          throw new Error(`Game ${gameId} has already started.`);
+        }
+      }
+
+      await setDoc(gameRef, initialGame);
+    } catch (err) {
+      if (err instanceof Error && err.message.includes('already started')) {
+        throw err;
+      }
+      console.warn('Firestore setDoc warning, using in-memory/local state:', err);
+    }
   }
-  return game;
+
+  return initialGame;
 }
 
 /**
- * Joins an existing game in Firestore.
+ * Joins an existing game in Firestore using an atomic transaction.
  */
 export async function joinGameInFirestore(
   gameId: string,
   playerInfo: { playerId: string; displayName: string; color: string }
 ): Promise<Game> {
-  if (!db) {
-    throw new Error('Firestore is not initialized.');
+  let updatedGame: Game;
+
+  if (db) {
+    try {
+      const gameRef = doc(db, 'games', gameId);
+      updatedGame = await runTransaction(db, async (transaction) => {
+        const snap = await transaction.get(gameRef);
+
+        if (!snap.exists()) {
+          throw new Error(`Game ${gameId} does not exist.`);
+        }
+
+        const existingGame = snap.data() as Game;
+
+        if (existingGame.phase !== 'lobby') {
+          throw new Error(`Game ${gameId} has already started.`);
+        }
+
+        if (existingGame.players[playerInfo.playerId]) {
+          return existingGame;
+        }
+
+        const gameWithPlayer = addPlayer(existingGame, playerInfo);
+        transaction.set(gameRef, gameWithPlayer);
+        return gameWithPlayer;
+      });
+    } catch (err) {
+      if (
+        err instanceof Error &&
+        (err.message.includes('does not exist') ||
+          err.message.includes('already started') ||
+          err.message.includes('already chosen'))
+      ) {
+        throw err;
+      }
+
+      const memGame = inMemoryGames.get(gameId) || getLocalGame(gameId);
+      if (!memGame) {
+        throw new Error(`Game ${gameId} does not exist.`);
+      }
+      if (memGame.phase !== 'lobby') {
+        throw new Error(`Game ${gameId} has already started.`);
+      }
+      if (memGame.players[playerInfo.playerId]) {
+        updatedGame = memGame;
+      } else {
+        updatedGame = addPlayer(memGame, playerInfo);
+      }
+    }
+  } else {
+    const memGame = inMemoryGames.get(gameId) || getLocalGame(gameId);
+    if (!memGame) {
+      throw new Error(`Game ${gameId} does not exist.`);
+    }
+    if (memGame.phase !== 'lobby') {
+      throw new Error(`Game ${gameId} has already started.`);
+    }
+    if (memGame.players[playerInfo.playerId]) {
+      updatedGame = memGame;
+    } else {
+      updatedGame = addPlayer(memGame, playerInfo);
+    }
   }
 
-  const gameRef = doc(db, 'games', gameId);
-  const snap = await getDoc(gameRef);
-
-  if (!snap.exists()) {
-    throw new Error(`Game ${gameId} does not exist.`);
-  }
-
-  const existingGame = snap.data() as Game;
-  const updatedGame = addPlayer(existingGame, playerInfo);
-
-  await setDoc(gameRef, updatedGame);
+  inMemoryGames.set(gameId, updatedGame);
+  saveLocalGame(gameId, updatedGame);
+  notifyMemoryListeners(gameId, updatedGame);
   return updatedGame;
 }
 
 /**
- * Updates a player's color in Firestore.
+ * Updates a player's color in Firestore using an atomic transaction.
  */
 export async function updatePlayerColorInFirestore(
   gameId: string,
   playerId: string,
   color: string
 ): Promise<Game> {
-  if (!db) {
-    throw new Error('Firestore is not initialized.');
+  let updatedGame: Game;
+
+  if (db) {
+    try {
+      const gameRef = doc(db, 'games', gameId);
+      updatedGame = await runTransaction(db, async (transaction) => {
+        const snap = await transaction.get(gameRef);
+
+        if (!snap.exists()) {
+          throw new Error(`Game ${gameId} does not exist.`);
+        }
+
+        const existingGame = snap.data() as Game;
+
+        if (existingGame.phase !== 'lobby') {
+          throw new Error(`Game ${gameId} has already started.`);
+        }
+
+        const gameWithColor = setPlayerColor(existingGame, playerId, color);
+        transaction.set(gameRef, gameWithColor);
+        return gameWithColor;
+      });
+    } catch (err) {
+      if (
+        err instanceof Error &&
+        (err.message.includes('does not exist') ||
+          err.message.includes('already started') ||
+          err.message.includes('already chosen'))
+      ) {
+        throw err;
+      }
+
+      const memGame = inMemoryGames.get(gameId) || getLocalGame(gameId);
+      if (!memGame) {
+        throw new Error(`Game ${gameId} does not exist.`);
+      }
+      updatedGame = setPlayerColor(memGame, playerId, color);
+    }
+  } else {
+    const memGame = inMemoryGames.get(gameId) || getLocalGame(gameId);
+    if (!memGame) {
+      throw new Error(`Game ${gameId} does not exist.`);
+    }
+    updatedGame = setPlayerColor(memGame, playerId, color);
   }
 
-  const gameRef = doc(db, 'games', gameId);
-  const snap = await getDoc(gameRef);
-
-  if (!snap.exists()) {
-    throw new Error(`Game ${gameId} does not exist.`);
-  }
-
-  const existingGame = snap.data() as Game;
-  const updatedGame = setPlayerColor(existingGame, playerId, color);
-
-  await setDoc(gameRef, updatedGame);
+  inMemoryGames.set(gameId, updatedGame);
+  saveLocalGame(gameId, updatedGame);
+  notifyMemoryListeners(gameId, updatedGame);
   return updatedGame;
 }
 
 /**
- * Toggles a player's ready state in Firestore.
+ * Toggles a player's ready state in Firestore using an atomic transaction.
  */
 export async function togglePlayerReadyInFirestore(
   gameId: string,
   playerId: string
 ): Promise<Game> {
-  if (!db) {
-    throw new Error('Firestore is not initialized.');
+  let updatedGame: Game;
+
+  if (db) {
+    try {
+      const gameRef = doc(db, 'games', gameId);
+      updatedGame = await runTransaction(db, async (transaction) => {
+        const snap = await transaction.get(gameRef);
+
+        if (!snap.exists()) {
+          throw new Error(`Game ${gameId} does not exist.`);
+        }
+
+        const existingGame = snap.data() as Game;
+        const gameWithReady = togglePlayerReady(existingGame, playerId);
+        transaction.set(gameRef, gameWithReady);
+        return gameWithReady;
+      });
+    } catch (err) {
+      if (err instanceof Error && err.message.includes('does not exist')) {
+        throw err;
+      }
+
+      const memGame = inMemoryGames.get(gameId) || getLocalGame(gameId);
+      if (!memGame) {
+        throw new Error(`Game ${gameId} does not exist.`);
+      }
+      updatedGame = togglePlayerReady(memGame, playerId);
+    }
+  } else {
+    const memGame = inMemoryGames.get(gameId) || getLocalGame(gameId);
+    if (!memGame) {
+      throw new Error(`Game ${gameId} does not exist.`);
+    }
+    updatedGame = togglePlayerReady(memGame, playerId);
   }
 
-  const gameRef = doc(db, 'games', gameId);
-  const snap = await getDoc(gameRef);
-
-  if (!snap.exists()) {
-    throw new Error(`Game ${gameId} does not exist.`);
-  }
-
-  const existingGame = snap.data() as Game;
-  const updatedGame = togglePlayerReady(existingGame, playerId);
-
-  await setDoc(gameRef, updatedGame);
+  inMemoryGames.set(gameId, updatedGame);
+  saveLocalGame(gameId, updatedGame);
+  notifyMemoryListeners(gameId, updatedGame);
   return updatedGame;
 }
 
 /**
- * Starts the game in Firestore (transitions phase from 'lobby' to 'playing').
+ * Starts the game in Firestore using an atomic transaction.
  */
 export async function startGameInFirestore(gameId: string): Promise<Game> {
-  if (!db) {
-    throw new Error('Firestore is not initialized.');
+  let updatedGame: Game;
+
+  if (db) {
+    try {
+      const gameRef = doc(db, 'games', gameId);
+      updatedGame = await runTransaction(db, async (transaction) => {
+        const snap = await transaction.get(gameRef);
+
+        if (!snap.exists()) {
+          throw new Error(`Game ${gameId} does not exist.`);
+        }
+
+        const existingGame = snap.data() as Game;
+
+        if (existingGame.phase !== 'lobby') {
+          return existingGame;
+        }
+
+        const playerList = Object.values(existingGame.players);
+        if (playerList.length < 2) {
+          throw new Error('At least 2 players are required to start the game.');
+        }
+
+        if (!playerList.every((p) => p.ready)) {
+          throw new Error('All players must be ready to start the game.');
+        }
+
+        const startedGame = engineStartGame(existingGame);
+        transaction.set(gameRef, startedGame);
+        return startedGame;
+      });
+    } catch (err) {
+      if (
+        err instanceof Error &&
+        (err.message.includes('does not exist') ||
+          err.message.includes('At least 2 players') ||
+          err.message.includes('All players must be ready'))
+      ) {
+        throw err;
+      }
+
+      const memGame = inMemoryGames.get(gameId) || getLocalGame(gameId);
+      if (!memGame) {
+        throw new Error(`Game ${gameId} does not exist.`);
+      }
+      const playerList = Object.values(memGame.players);
+      if (playerList.length < 2) {
+        throw new Error('At least 2 players are required to start the game.');
+      }
+      if (!playerList.every((p) => p.ready)) {
+        throw new Error('All players must be ready to start the game.');
+      }
+      updatedGame = engineStartGame(memGame);
+    }
+  } else {
+    const memGame = inMemoryGames.get(gameId) || getLocalGame(gameId);
+    if (!memGame) {
+      throw new Error(`Game ${gameId} does not exist.`);
+    }
+    const playerList = Object.values(memGame.players);
+    if (playerList.length < 2) {
+      throw new Error('At least 2 players are required to start the game.');
+    }
+    if (!playerList.every((p) => p.ready)) {
+      throw new Error('All players must be ready to start the game.');
+    }
+    updatedGame = engineStartGame(memGame);
   }
 
-  const gameRef = doc(db, 'games', gameId);
-  const snap = await getDoc(gameRef);
-
-  if (!snap.exists()) {
-    throw new Error(`Game ${gameId} does not exist.`);
-  }
-
-  const existingGame = snap.data() as Game;
-  const updatedGame = engineStartGame(existingGame);
-
-  await setDoc(gameRef, updatedGame);
+  inMemoryGames.set(gameId, updatedGame);
+  saveLocalGame(gameId, updatedGame);
+  notifyMemoryListeners(gameId, updatedGame);
   return updatedGame;
 }
 
@@ -159,23 +461,51 @@ export async function startGameInFirestore(gameId: string): Promise<Game> {
  */
 export function subscribeToGame(
   gameId: string,
-  onUpdate: (game: Game) => void,
+  onUpdate: (game: Game | null) => void,
   onError?: (err: Error) => void
 ): Unsubscribe {
-  if (!db) {
-    return () => {};
+  if (!inMemoryListeners.has(gameId)) {
+    inMemoryListeners.set(gameId, new Set());
+  }
+  const listenerSet = inMemoryListeners.get(gameId)!;
+  listenerSet.add(onUpdate);
+
+  const existingMemGame = inMemoryGames.get(gameId) || getLocalGame(gameId);
+  if (existingMemGame) {
+    onUpdate(existingMemGame);
   }
 
-  const gameRef = doc(db, 'games', gameId);
-  return onSnapshot(
-    gameRef,
-    (snap) => {
-      if (snap.exists()) {
-        onUpdate(snap.data() as Game);
-      }
-    },
-    (err) => {
-      if (onError) onError(err);
+  let firestoreUnsub: Unsubscribe = () => {};
+
+  if (db) {
+    try {
+      const gameRef = doc(db, 'games', gameId);
+      firestoreUnsub = onSnapshot(
+        gameRef,
+        (snap) => {
+          if (snap.exists()) {
+            const g = snap.data() as Game;
+            inMemoryGames.set(gameId, g);
+            saveLocalGame(gameId, g);
+            onUpdate(g);
+          } else {
+            onUpdate(null);
+          }
+        },
+        (err) => {
+          if (onError) onError(err);
+        }
+      );
+    } catch (err) {
+      if (onError && err instanceof Error) onError(err);
     }
-  );
+  }
+
+  return () => {
+    listenerSet.delete(onUpdate);
+    if (listenerSet.size === 0) {
+      inMemoryListeners.delete(gameId);
+    }
+    firestoreUnsub();
+  };
 }

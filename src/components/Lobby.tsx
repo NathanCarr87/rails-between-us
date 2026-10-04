@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import type { Game } from '../game/model/types';
 import { PLAYER_COLORS } from '../game/state/gameEngine';
+import { generateGameCode } from '../game/services/firebase';
 
 interface LobbyProps {
   game: Game | null;
@@ -10,6 +11,7 @@ interface LobbyProps {
   onSelectColor: (color: string) => void;
   onToggleReady: () => void;
   onStartGame: () => void;
+  onLeaveGame?: () => void;
   errorMessage?: string | null;
 }
 
@@ -21,15 +23,17 @@ export const Lobby: React.FC<LobbyProps> = ({
   onSelectColor,
   onToggleReady,
   onStartGame,
+  onLeaveGame,
   errorMessage,
 }) => {
   const [playerName, setPlayerName] = useState('');
   const [gameIdInput, setGameIdInput] = useState('');
   const [selectedColor, setSelectedColor] = useState(PLAYER_COLORS[0]);
+  const [copied, setCopied] = useState(false);
 
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
-    const id = gameIdInput.trim() || `game_${Math.floor(1000 + Math.random() * 9000)}`;
+    const id = gameIdInput.trim() || generateGameCode();
     const name = playerName.trim() || 'Player 1';
     onCreateGame(id, name, selectedColor);
   };
@@ -41,6 +45,26 @@ export const Lobby: React.FC<LobbyProps> = ({
     }
     const name = playerName.trim() || 'Player 2';
     onJoinGame(gameIdInput.trim(), name, selectedColor);
+  };
+
+  const handleCopyCode = () => {
+    if (game?.gameId) {
+      if (navigator.clipboard) {
+        navigator.clipboard
+          .writeText(game.gameId)
+          .then(() => {
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+          })
+          .catch(() => {
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+          });
+      } else {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      }
+    }
   };
 
   if (!game) {
@@ -143,8 +167,22 @@ export const Lobby: React.FC<LobbyProps> = ({
   return (
     <div style={styles.container} data-testid="lobby-active-container">
       <header style={styles.header}>
-        <h1 style={styles.title}>Game Lobby: {game.gameId}</h1>
-        <p style={styles.subtitle}>Phase: <strong>{game.phase.toUpperCase()}</strong></p>
+        <h1 style={styles.title}>Game Lobby</h1>
+        <div style={styles.codeContainer}>
+          <span style={styles.codeLabel}>Game Code:</span>
+          <strong style={styles.codeBadge} data-testid="game-code-display">{game.gameId}</strong>
+          <button
+            type="button"
+            onClick={handleCopyCode}
+            style={styles.btnCopy}
+            data-testid="copy-code-btn"
+          >
+            {copied ? '✓ Copied!' : 'Copy Code'}
+          </button>
+        </div>
+        <p style={styles.subtitle}>
+          Phase: <strong>{game.phase.toUpperCase()}</strong>
+        </p>
       </header>
 
       {errorMessage && (
@@ -227,7 +265,7 @@ export const Lobby: React.FC<LobbyProps> = ({
           ))}
         </div>
 
-        <div style={{ marginTop: '20px' }}>
+        <div style={{ marginTop: '20px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
           <button
             type="button"
             onClick={onStartGame}
@@ -241,6 +279,16 @@ export const Lobby: React.FC<LobbyProps> = ({
           >
             Start Game
           </button>
+          {onLeaveGame && (
+            <button
+              type="button"
+              onClick={onLeaveGame}
+              style={styles.btnSecondary}
+              data-testid="leave-lobby-btn"
+            >
+              Leave Lobby
+            </button>
+          )}
           {!allReady && (
             <p style={styles.mutedTextSmall}>
               Requires at least 2 players and all players marked as READY to start.
@@ -267,16 +315,48 @@ const styles: Record<string, React.CSSProperties> = {
   },
   header: {
     textAlign: 'center',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: '6px',
   },
   title: {
     fontSize: '28px',
-    margin: '0 0 6px 0',
+    margin: 0,
     color: '#1a202c',
   },
   subtitle: {
     margin: 0,
     fontSize: '15px',
     color: '#718096',
+  },
+  codeContainer: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    margin: '4px 0',
+  },
+  codeLabel: {
+    fontSize: '14px',
+    color: '#4a5568',
+  },
+  codeBadge: {
+    fontSize: '18px',
+    letterSpacing: '1px',
+    backgroundColor: '#edf2f7',
+    padding: '4px 10px',
+    borderRadius: '6px',
+    color: '#2b6cb0',
+  },
+  btnCopy: {
+    padding: '4px 10px',
+    fontSize: '12px',
+    fontWeight: 'bold',
+    backgroundColor: '#e2e8f0',
+    color: '#2d3748',
+    border: 'none',
+    borderRadius: '6px',
+    cursor: 'pointer',
   },
   errorBox: {
     backgroundColor: '#fed7d7',
@@ -343,6 +423,17 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '15px',
     cursor: 'pointer',
   },
+  btnSecondary: {
+    width: '100%',
+    padding: '10px',
+    backgroundColor: '#e2e8f0',
+    color: '#4a5568',
+    border: 'none',
+    borderRadius: '8px',
+    fontWeight: 'bold',
+    fontSize: '14px',
+    cursor: 'pointer',
+  },
   btnSuccess: {
     flex: 1,
     padding: '12px',
@@ -373,7 +464,7 @@ const styles: Record<string, React.CSSProperties> = {
   mutedTextSmall: {
     fontSize: '12px',
     color: '#a0aec0',
-    marginTop: '8px',
+    marginTop: '4px',
   },
   playersListContainer: {
     display: 'flex',
