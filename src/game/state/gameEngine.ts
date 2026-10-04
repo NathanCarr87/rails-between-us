@@ -12,10 +12,22 @@ import {
 export const MAX_PLAYERS = 6;
 export const MIN_PLAYERS = 2;
 
+export const PLAYER_COLORS = [
+  '#e53e3e', // Red
+  '#3182ce', // Blue
+  '#38a169', // Green
+  '#d69e2e', // Yellow
+  '#805ad5', // Purple
+  '#dd6b20', // Orange
+  '#2d3748', // Black
+  '#edf2f7', // White / Silver
+];
+
 export function createGame(gameId: string = 'game_' + Date.now()): Game {
   const now = Date.now();
   return {
     gameId,
+    phase: 'lobby',
     status: 'waiting',
     players: {},
     playerOrder: [],
@@ -33,9 +45,15 @@ export function createGame(gameId: string = 'game_' + Date.now()): Game {
   };
 }
 
+export function isColorTaken(game: Game, color: string, excludingPlayerId?: string): boolean {
+  return Object.values(game.players).some(
+    (p) => p.playerId !== excludingPlayerId && p.color.toLowerCase() === color.toLowerCase()
+  );
+}
+
 export function addPlayer(
   game: Game,
-  playerInfo: { playerId: string; displayName: string; color: string }
+  playerInfo: { playerId: string; displayName: string; color: string; ready?: boolean }
 ): Game {
   if (game.playerOrder.length >= MAX_PLAYERS) {
     throw new Error(`Cannot add player: Maximum limit of ${MAX_PLAYERS} players reached.`);
@@ -45,10 +63,15 @@ export function addPlayer(
     throw new Error(`Player with ID ${playerInfo.playerId} already exists.`);
   }
 
+  if (isColorTaken(game, playerInfo.color)) {
+    throw new Error(`Color ${playerInfo.color} is already chosen by another player.`);
+  }
+
   const newPlayer: Player = {
     playerId: playerInfo.playerId,
     displayName: playerInfo.displayName,
     color: playerInfo.color,
+    ready: playerInfo.ready ?? false,
     trainCards: [],
     destinationTickets: [],
     claimedRoutes: [],
@@ -57,21 +80,72 @@ export function addPlayer(
   };
 
   const updatedPlayerOrder = [...game.playerOrder, playerInfo.playerId];
-  const newStatus = updatedPlayerOrder.length >= MIN_PLAYERS && game.status === 'waiting'
-    ? 'active'
-    : game.status;
-
-  const currentPlayerId = game.currentPlayerId ?? (newStatus === 'active' ? updatedPlayerOrder[0] : null);
-  const turnNumber = game.turnNumber === 0 && newStatus === 'active' ? 1 : game.turnNumber;
 
   return {
     ...game,
-    status: newStatus,
     players: {
       ...game.players,
       [playerInfo.playerId]: newPlayer,
     },
     playerOrder: updatedPlayerOrder,
+    updatedAt: Date.now(),
+  };
+}
+
+export function setPlayerColor(game: Game, playerId: string, color: string): Game {
+  const player = game.players[playerId];
+  if (!player) {
+    throw new Error(`Player ${playerId} not found.`);
+  }
+
+  if (isColorTaken(game, color, playerId)) {
+    throw new Error(`Color ${color} is already chosen by another player.`);
+  }
+
+  return {
+    ...game,
+    players: {
+      ...game.players,
+      [playerId]: {
+        ...player,
+        color,
+      },
+    },
+    updatedAt: Date.now(),
+  };
+}
+
+export function togglePlayerReady(game: Game, playerId: string): Game {
+  const player = game.players[playerId];
+  if (!player) {
+    throw new Error(`Player ${playerId} not found.`);
+  }
+
+  return {
+    ...game,
+    players: {
+      ...game.players,
+      [playerId]: {
+        ...player,
+        ready: !player.ready,
+      },
+    },
+    updatedAt: Date.now(),
+  };
+}
+
+export function startGame(game: Game): Game {
+  if (game.playerOrder.length < MIN_PLAYERS) {
+    throw new Error(`At least ${MIN_PLAYERS} players are required to start the game.`);
+  }
+
+  const currentPlayerId = game.currentPlayerId ?? game.playerOrder[0];
+  const turnNumber = game.turnNumber === 0 ? 1 : game.turnNumber;
+
+  return {
+    ...game,
+    phase: 'playing',
+    status: 'active',
     currentPlayerId,
     turnNumber,
     updatedAt: Date.now(),
@@ -114,6 +188,7 @@ export function advanceTurn(game: Game): Game {
 
     return {
       ...game,
+      phase: 'finished',
       status: 'completed',
       currentPlayerId: null,
       isFinalRound: true,
