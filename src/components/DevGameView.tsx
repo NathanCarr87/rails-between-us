@@ -1,90 +1,140 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import type { CardColor, Game } from '../game/model/types';
 import {
-  addPlayer,
   advanceTurn,
   claimRoute,
-  createGame,
   drawTrainCards,
-  setPlayerColor,
-  startGame,
-  togglePlayerReady,
 } from '../game/state/gameEngine';
+import {
+  clearPlayerSession,
+  createGameInFirestore,
+  getPlayerSession,
+  joinGameInFirestore,
+  savePlayerSession,
+  startGameInFirestore,
+  subscribeToGame,
+  togglePlayerReadyInFirestore,
+  updatePlayerColorInFirestore,
+} from '../game/services/firebase';
 import { GameBoard } from './GameBoard';
 import { PlayerStatus } from './PlayerStatus';
 import { Lobby } from './Lobby';
 
 export const DevGameView: React.FC = () => {
+  const [activeGameId, setActiveGameId] = useState<string>(() => {
+    const session = getPlayerSession();
+    return session?.gameId || '';
+  });
+  const [localPlayerId, setLocalPlayerId] = useState<string>(() => {
+    const session = getPlayerSession();
+    return session?.playerId || '';
+  });
   const [game, setGame] = useState<Game | null>(null);
-  const [localPlayerId, setLocalPlayerId] = useState<string>('');
   const [selectedRouteId, setSelectedRouteId] = useState<string>('');
   const [selectedCardColor, setSelectedCardColor] = useState<CardColor>('red');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const handleCreateGame = (gameId: string, playerName: string, color: string) => {
+  // Subscribe to real-time updates whenever activeGameId changes
+  useEffect(() => {
+    if (!activeGameId) return;
+
+    const unsubscribe = subscribeToGame(
+      activeGameId,
+      (updatedGame) => {
+        if (!updatedGame) {
+          clearPlayerSession(activeGameId);
+          setGame(null);
+          setActiveGameId('');
+          setErrorMessage(`Game ${activeGameId} does not exist.`);
+        } else {
+          setGame(updatedGame);
+        }
+      },
+      (err) => {
+        setErrorMessage(err.message || 'Error subscribing to game updates.');
+      }
+    );
+
+    return () => unsubscribe();
+  }, [activeGameId]);
+
+  const handleCreateGame = async (gameId: string, playerName: string, color: string) => {
     setErrorMessage(null);
     try {
-      const pid = `p_${Date.now()}`;
-      let newGame = createGame(gameId);
-      newGame = addPlayer(newGame, { playerId: pid, displayName: playerName, color, ready: true });
-      setGame(newGame);
+      const pid = `p_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+      const newGame = await createGameInFirestore(gameId, {
+        playerId: pid,
+        displayName: playerName,
+        color,
+      });
+
+      savePlayerSession(gameId, pid, playerName);
       setLocalPlayerId(pid);
+      setActiveGameId(gameId);
+      setGame(newGame);
     } catch (err: unknown) {
       setErrorMessage(err instanceof Error ? err.message : 'Error creating game');
     }
   };
 
-  const handleJoinGame = (gameId: string, playerName: string, color: string) => {
+  const handleJoinGame = async (gameId: string, playerName: string, color: string) => {
     setErrorMessage(null);
     try {
-      const pid = `p_${Date.now()}`;
-      let currentGame = game;
-      if (!currentGame || currentGame.gameId !== gameId) {
-        currentGame = createGame(gameId);
-      }
-      const updatedGame = addPlayer(currentGame, { playerId: pid, displayName: playerName, color, ready: true });
-      setGame(updatedGame);
+      const existingSession = getPlayerSession(gameId);
+      const pid = existingSession?.playerId || `p_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+
+      const updatedGame = await joinGameInFirestore(gameId, {
+        playerId: pid,
+        displayName: playerName,
+        color,
+      });
+
+      savePlayerSession(gameId, pid, playerName);
       setLocalPlayerId(pid);
+      setActiveGameId(gameId);
+      setGame(updatedGame);
     } catch (err: unknown) {
       setErrorMessage(err instanceof Error ? err.message : 'Error joining game');
     }
   };
 
-  const handleSelectColor = (color: string) => {
-    if (!game || !localPlayerId) return;
+  const handleSelectColor = async (color: string) => {
+    if (!activeGameId || !localPlayerId) return;
     setErrorMessage(null);
     try {
-      const updated = setPlayerColor(game, localPlayerId, color);
-      setGame(updated);
+      const updatedGame = await updatePlayerColorInFirestore(activeGameId, localPlayerId, color);
+      setGame(updatedGame);
     } catch (err: unknown) {
       setErrorMessage(err instanceof Error ? err.message : 'Error selecting color');
     }
   };
 
-  const handleToggleReady = () => {
-    if (!game || !localPlayerId) return;
+  const handleToggleReady = async () => {
+    if (!activeGameId || !localPlayerId) return;
     setErrorMessage(null);
     try {
-      const updated = togglePlayerReady(game, localPlayerId);
-      setGame(updated);
+      const updatedGame = await togglePlayerReadyInFirestore(activeGameId, localPlayerId);
+      setGame(updatedGame);
     } catch (err: unknown) {
       setErrorMessage(err instanceof Error ? err.message : 'Error toggling ready');
     }
   };
 
-  const handleStartGame = () => {
-    if (!game) return;
+  const handleStartGame = async () => {
+    if (!activeGameId) return;
     setErrorMessage(null);
     try {
-      const updated = startGame(game);
-      setGame(updated);
+      const updatedGame = await startGameInFirestore(activeGameId);
+      setGame(updatedGame);
     } catch (err: unknown) {
       setErrorMessage(err instanceof Error ? err.message : 'Error starting game');
     }
   };
 
-  const handleReset = () => {
+  const handleLeaveGame = () => {
+    clearPlayerSession(activeGameId);
     setGame(null);
+    setActiveGameId('');
     setLocalPlayerId('');
     setSelectedRouteId('');
     setErrorMessage(null);
@@ -147,7 +197,6 @@ export const DevGameView: React.FC = () => {
       return;
     }
 
-    // Determine card color to use for the route
     let requiredColor: CardColor = selectedCardColor;
     if (route.colorRequirement !== 'any') {
       requiredColor = route.colorRequirement;
@@ -212,6 +261,7 @@ export const DevGameView: React.FC = () => {
         onSelectColor={handleSelectColor}
         onToggleReady={handleToggleReady}
         onStartGame={handleStartGame}
+        onLeaveGame={handleLeaveGame}
         errorMessage={errorMessage}
       />
     );
@@ -270,7 +320,7 @@ export const DevGameView: React.FC = () => {
             >
               Advance Turn
             </button>
-            <button style={styles.btnDanger} onClick={handleReset}>
+            <button style={styles.btnDanger} onClick={handleLeaveGame}>
               Return to Lobby
             </button>
           </div>
@@ -394,27 +444,6 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 'bold',
     cursor: 'pointer',
   },
-  btnSuccess: {
-    padding: '8px 12px',
-    backgroundColor: '#38a169',
-    color: '#ffffff',
-    border: 'none',
-    borderRadius: '8px',
-    fontWeight: 'bold',
-    cursor: 'pointer',
-  },
-  formRow: {
-    display: 'flex',
-    gap: '8px',
-    marginBottom: '12px',
-  },
-  input: {
-    flex: 1,
-    padding: '8px 12px',
-    borderRadius: '8px',
-    border: '1px solid #cbd5e0',
-    fontSize: '14px',
-  },
   actionBox: {
     display: 'flex',
     flexDirection: 'column',
@@ -431,13 +460,6 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: '8px',
     border: '1px solid #cbd5e0',
     fontSize: '14px',
-  },
-  selectedRouteInfo: {
-    padding: '8px',
-    backgroundColor: '#ebf8ff',
-    borderRadius: '6px',
-    fontSize: '13px',
-    color: '#2b6cb0',
   },
   mutedText: {
     color: '#718096',
