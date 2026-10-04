@@ -1,3 +1,4 @@
+export type GamePhase = 'lobby' | 'playing' | 'finished';
 export type GameStatus = 'waiting' | 'active' | 'completed';
 
 export type TrainColor =
@@ -43,6 +44,7 @@ export interface Player {
   playerId: string;
   displayName: string;
   color: string;
+  ready: boolean;
   trainCards: TrainCard[];
   destinationTickets: DestinationTicket[];
   claimedRoutes: string[]; // routeIds
@@ -57,6 +59,7 @@ export interface BoardState {
 
 export interface Game {
   gameId: string;
+  phase: GamePhase;
   status: GameStatus;
   players: Record<string, Player>;
   playerOrder: string[];

@@ -10,6 +10,7 @@ import {
   drawTrainCards,
   executeTurnAction,
   MAX_PLAYERS,
+  startGame,
 } from '../state/gameEngine';
 import type { TrainCard } from '../model/types';
 
@@ -29,42 +30,46 @@ describe('Game Domain Model & Rules', () => {
     expect(game.destinationTicketDeck.length).toBeGreaterThan(0);
   });
 
-  it('allows adding 2 to 6 players and transition status to active', () => {
+  it('allows adding 2 to 6 players with unique colors and starting the game', () => {
     let game = createGame();
 
     // Player 1
-    game = addPlayer(game, { playerId: 'p1', displayName: 'Alice', color: 'red' });
+    game = addPlayer(game, { playerId: 'p1', displayName: 'Alice', color: '#e53e3e' });
     expect(game.status).toBe('waiting');
+    expect(game.phase).toBe('lobby');
     expect(game.playerOrder.length).toBe(1);
 
-    // Player 2 -> status becomes active
-    game = addPlayer(game, { playerId: 'p2', displayName: 'Bob', color: 'blue' });
-    expect(game.status).toBe('active');
+    // Player 2
+    game = addPlayer(game, { playerId: 'p2', displayName: 'Bob', color: '#3182ce' });
     expect(game.playerOrder.length).toBe(2);
-    expect(game.currentPlayerId).toBe('p1');
-    expect(game.turnNumber).toBe(1);
 
-    // Add up to 6 players
+    // Colors must be unique
+    expect(() => {
+      addPlayer(game, { playerId: 'p3_dup', displayName: 'Dup', color: '#e53e3e' });
+    }).toThrow(/already chosen/);
+
+    const colors = ['#38a169', '#d69e2e', '#805ad5', '#dd6b20'];
     for (let i = 3; i <= MAX_PLAYERS; i++) {
       game = addPlayer(game, {
         playerId: `p${i}`,
         displayName: `Player ${i}`,
-        color: 'green',
+        color: colors[i - 3],
       });
     }
     expect(game.playerOrder.length).toBe(6);
 
     // Adding 7th player throws error
     expect(() => {
-      addPlayer(game, { playerId: 'p7', displayName: 'Extra', color: 'yellow' });
+      addPlayer(game, { playerId: 'p7', displayName: 'Extra', color: '#2d3748' });
     }).toThrow(/Maximum limit/);
   });
 
-  it('advances turns correctly', () => {
+  it('advances turns correctly when game is started', () => {
     let game = createGame();
-    game = addPlayer(game, { playerId: 'p1', displayName: 'Alice', color: 'red' });
-    game = addPlayer(game, { playerId: 'p2', displayName: 'Bob', color: 'blue' });
-    game = addPlayer(game, { playerId: 'p3', displayName: 'Charlie', color: 'green' });
+    game = addPlayer(game, { playerId: 'p1', displayName: 'Alice', color: '#e53e3e' });
+    game = addPlayer(game, { playerId: 'p2', displayName: 'Bob', color: '#3182ce' });
+    game = addPlayer(game, { playerId: 'p3', displayName: 'Charlie', color: '#38a169' });
+    game = startGame(game);
 
     expect(game.currentPlayerId).toBe('p1');
     expect(game.turnNumber).toBe(1);
@@ -82,8 +87,9 @@ describe('Game Domain Model & Rules', () => {
 
   it('validates and claims routes cleanly', () => {
     let game = createGame();
-    game = addPlayer(game, { playerId: 'p1', displayName: 'Alice', color: 'red' });
-    game = addPlayer(game, { playerId: 'p2', displayName: 'Bob', color: 'blue' });
+    game = addPlayer(game, { playerId: 'p1', displayName: 'Alice', color: '#e53e3e' });
+    game = addPlayer(game, { playerId: 'p2', displayName: 'Bob', color: '#3182ce' });
+    game = startGame(game);
 
     // Give p1 2 red cards
     const redCards: TrainCard[] = [
@@ -113,8 +119,9 @@ describe('Game Domain Model & Rules', () => {
 
   it('rejects route claim when cards or player turn is invalid', () => {
     let game = createGame();
-    game = addPlayer(game, { playerId: 'p1', displayName: 'Alice', color: 'red' });
-    game = addPlayer(game, { playerId: 'p2', displayName: 'Bob', color: 'blue' });
+    game = addPlayer(game, { playerId: 'p1', displayName: 'Alice', color: '#e53e3e' });
+    game = addPlayer(game, { playerId: 'p2', displayName: 'Bob', color: '#3182ce' });
+    game = startGame(game);
 
     const routeId = 'route_boston_new_york_red'; // length 2, color red
 
@@ -149,6 +156,7 @@ describe('Game Domain Model & Rules', () => {
       playerId: 'p1',
       displayName: 'Alice',
       color: 'red',
+      ready: true,
       trainCards: [],
       destinationTickets: [],
       claimedRoutes: ['route_boston_new_york_red', 'route_denver_helena_green'], // length 2 and length 4
@@ -185,8 +193,9 @@ describe('Game Domain Model & Rules', () => {
   describe('Player Turn Actions & Turn Advancement', () => {
     it('draws 2 train cards and advances turn', () => {
       let game = createGame();
-      game = addPlayer(game, { playerId: 'p1', displayName: 'Alice', color: 'red' });
-      game = addPlayer(game, { playerId: 'p2', displayName: 'Bob', color: 'blue' });
+      game = addPlayer(game, { playerId: 'p1', displayName: 'Alice', color: '#e53e3e' });
+      game = addPlayer(game, { playerId: 'p2', displayName: 'Bob', color: '#3182ce' });
+      game = startGame(game);
 
       expect(game.currentPlayerId).toBe('p1');
       const p1InitialCardCount = game.players.p1.trainCards.length;
@@ -202,8 +211,9 @@ describe('Game Domain Model & Rules', () => {
 
     it('claims a route and advances turn', () => {
       let game = createGame();
-      game = addPlayer(game, { playerId: 'p1', displayName: 'Alice', color: 'red' });
-      game = addPlayer(game, { playerId: 'p2', displayName: 'Bob', color: 'blue' });
+      game = addPlayer(game, { playerId: 'p1', displayName: 'Alice', color: '#e53e3e' });
+      game = addPlayer(game, { playerId: 'p2', displayName: 'Bob', color: '#3182ce' });
+      game = startGame(game);
 
       const redCards: TrainCard[] = [
         { id: 'c1', color: 'red' },
@@ -226,8 +236,9 @@ describe('Game Domain Model & Rules', () => {
 
     it('draws destination tickets and advances turn', () => {
       let game = createGame();
-      game = addPlayer(game, { playerId: 'p1', displayName: 'Alice', color: 'red' });
-      game = addPlayer(game, { playerId: 'p2', displayName: 'Bob', color: 'blue' });
+      game = addPlayer(game, { playerId: 'p1', displayName: 'Alice', color: '#e53e3e' });
+      game = addPlayer(game, { playerId: 'p2', displayName: 'Bob', color: '#3182ce' });
+      game = startGame(game);
 
       expect(game.currentPlayerId).toBe('p1');
       const initialTicketDeckCount = game.destinationTicketDeck.length;
@@ -242,8 +253,9 @@ describe('Game Domain Model & Rules', () => {
 
     it('throws error when performing action out of turn', () => {
       let game = createGame();
-      game = addPlayer(game, { playerId: 'p1', displayName: 'Alice', color: 'red' });
-      game = addPlayer(game, { playerId: 'p2', displayName: 'Bob', color: 'blue' });
+      game = addPlayer(game, { playerId: 'p1', displayName: 'Alice', color: '#e53e3e' });
+      game = addPlayer(game, { playerId: 'p2', displayName: 'Bob', color: '#3182ce' });
+      game = startGame(game);
 
       expect(game.currentPlayerId).toBe('p1');
 
@@ -268,9 +280,10 @@ describe('Game Domain Model & Rules', () => {
   describe('End-Game Trigger & Completion Logic', () => {
     it('triggers final round when a player has 2 or fewer trains remaining', () => {
       let game = createGame();
-      game = addPlayer(game, { playerId: 'p1', displayName: 'Alice', color: 'red' });
-      game = addPlayer(game, { playerId: 'p2', displayName: 'Bob', color: 'blue' });
-      game = addPlayer(game, { playerId: 'p3', displayName: 'Charlie', color: 'green' });
+      game = addPlayer(game, { playerId: 'p1', displayName: 'Alice', color: '#e53e3e' });
+      game = addPlayer(game, { playerId: 'p2', displayName: 'Bob', color: '#3182ce' });
+      game = addPlayer(game, { playerId: 'p3', displayName: 'Charlie', color: '#38a169' });
+      game = startGame(game);
 
       // Simulate p1 having 2 trains remaining
       game.players.p1.trainsRemaining = 2;
@@ -289,9 +302,10 @@ describe('Game Domain Model & Rules', () => {
 
     it('allows every other player exactly one final turn before marking game completed', () => {
       let game = createGame();
-      game = addPlayer(game, { playerId: 'p1', displayName: 'Alice', color: 'red' });
-      game = addPlayer(game, { playerId: 'p2', displayName: 'Bob', color: 'blue' });
-      game = addPlayer(game, { playerId: 'p3', displayName: 'Charlie', color: 'green' });
+      game = addPlayer(game, { playerId: 'p1', displayName: 'Alice', color: '#e53e3e' });
+      game = addPlayer(game, { playerId: 'p2', displayName: 'Bob', color: '#3182ce' });
+      game = addPlayer(game, { playerId: 'p3', displayName: 'Charlie', color: '#38a169' });
+      game = startGame(game);
 
       // p1 triggers final round
       game.players.p1.trainsRemaining = 1;
@@ -316,8 +330,9 @@ describe('Game Domain Model & Rules', () => {
 
     it('calculates final scores including destination tickets when game finishes', () => {
       let game = createGame();
-      game = addPlayer(game, { playerId: 'p1', displayName: 'Alice', color: 'red' });
-      game = addPlayer(game, { playerId: 'p2', displayName: 'Bob', color: 'blue' });
+      game = addPlayer(game, { playerId: 'p1', displayName: 'Alice', color: '#e53e3e' });
+      game = addPlayer(game, { playerId: 'p2', displayName: 'Bob', color: '#3182ce' });
+      game = startGame(game);
 
       // Setup p1 destination tickets and claimed routes
       // Ticket 1: Boston -> Washington (8 pts) - COMPLETED

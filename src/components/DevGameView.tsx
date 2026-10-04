@@ -6,57 +6,98 @@ import {
   claimRoute,
   createGame,
   drawTrainCards,
-  MAX_PLAYERS,
+  setPlayerColor,
+  startGame,
+  togglePlayerReady,
 } from '../game/state/gameEngine';
 import { GameBoard } from './GameBoard';
 import { PlayerStatus } from './PlayerStatus';
-
-const PLAYER_COLORS = ['#e53e3e', '#3182ce', '#38a169', '#d69e2e', '#805ad5', '#dd6b20'];
+import { Lobby } from './Lobby';
 
 export const DevGameView: React.FC = () => {
-  const [game, setGame] = useState<Game>(() => createGame('dev_game_1'));
-  const [newPlayerName, setNewPlayerName] = useState('');
+  const [game, setGame] = useState<Game | null>(null);
+  const [localPlayerId, setLocalPlayerId] = useState<string>('');
   const [selectedRouteId, setSelectedRouteId] = useState<string>('');
   const [selectedCardColor, setSelectedCardColor] = useState<CardColor>('red');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  const handleCreateGame = (gameId: string, playerName: string, color: string) => {
+    setErrorMessage(null);
+    try {
+      const pid = `p_${Date.now()}`;
+      let newGame = createGame(gameId);
+      newGame = addPlayer(newGame, { playerId: pid, displayName: playerName, color, ready: true });
+      setGame(newGame);
+      setLocalPlayerId(pid);
+    } catch (err: unknown) {
+      setErrorMessage(err instanceof Error ? err.message : 'Error creating game');
+    }
+  };
+
+  const handleJoinGame = (gameId: string, playerName: string, color: string) => {
+    setErrorMessage(null);
+    try {
+      const pid = `p_${Date.now()}`;
+      let currentGame = game;
+      if (!currentGame || currentGame.gameId !== gameId) {
+        currentGame = createGame(gameId);
+      }
+      const updatedGame = addPlayer(currentGame, { playerId: pid, displayName: playerName, color, ready: true });
+      setGame(updatedGame);
+      setLocalPlayerId(pid);
+    } catch (err: unknown) {
+      setErrorMessage(err instanceof Error ? err.message : 'Error joining game');
+    }
+  };
+
+  const handleSelectColor = (color: string) => {
+    if (!game || !localPlayerId) return;
+    setErrorMessage(null);
+    try {
+      const updated = setPlayerColor(game, localPlayerId, color);
+      setGame(updated);
+    } catch (err: unknown) {
+      setErrorMessage(err instanceof Error ? err.message : 'Error selecting color');
+    }
+  };
+
+  const handleToggleReady = () => {
+    if (!game || !localPlayerId) return;
+    setErrorMessage(null);
+    try {
+      const updated = togglePlayerReady(game, localPlayerId);
+      setGame(updated);
+    } catch (err: unknown) {
+      setErrorMessage(err instanceof Error ? err.message : 'Error toggling ready');
+    }
+  };
+
+  const handleStartGame = () => {
+    if (!game) return;
+    setErrorMessage(null);
+    try {
+      const updated = startGame(game);
+      setGame(updated);
+    } catch (err: unknown) {
+      setErrorMessage(err instanceof Error ? err.message : 'Error starting game');
+    }
+  };
+
   const handleReset = () => {
-    setGame(createGame('dev_game_' + Date.now()));
+    setGame(null);
+    setLocalPlayerId('');
     setSelectedRouteId('');
     setErrorMessage(null);
   };
 
-  const handleAddPlayer = (e: React.FormEvent) => {
-    e.preventDefault();
-    setErrorMessage(null);
-
-    const name = newPlayerName.trim() || `Player ${game.playerOrder.length + 1}`;
-    const playerId = `player_${Date.now()}_${game.playerOrder.length + 1}`;
-    const color = PLAYER_COLORS[game.playerOrder.length % PLAYER_COLORS.length];
-
-    try {
-      const updatedGame = addPlayer(game, {
-        playerId,
-        displayName: name,
-        color,
-      });
-      setGame(updatedGame);
-      setNewPlayerName('');
-    } catch (err: unknown) {
-      if (err instanceof Error) {
-        setErrorMessage(err.message);
-      } else {
-        setErrorMessage('An error occurred adding player.');
-      }
-    }
-  };
-
   const handleAdvanceTurn = () => {
+    if (!game) return;
     setErrorMessage(null);
     setGame(advanceTurn(game));
   };
 
   const handleDrawCards = (playerId: string) => {
+    if (!game) return;
     setErrorMessage(null);
     try {
       const updatedGame = drawTrainCards(game, playerId, 2);
@@ -69,11 +110,12 @@ export const DevGameView: React.FC = () => {
   };
 
   const handleClaimRoute = (routeIdToClaim?: string) => {
+    if (!game) return;
     setErrorMessage(null);
     const targetRouteId = routeIdToClaim || selectedRouteId;
 
     if (!game.currentPlayerId) {
-      setErrorMessage('No active player. Please add players first.');
+      setErrorMessage('No active player. Please start game first.');
       return;
     }
     if (!targetRouteId) {
@@ -110,7 +152,6 @@ export const DevGameView: React.FC = () => {
     if (route.colorRequirement !== 'any') {
       requiredColor = route.colorRequirement;
     } else {
-      // If specific card color selected has enough cards, use it; otherwise find a color with enough cards in hand
       const colorCounts: Record<string, number> = {};
       const locoCount = currentPlayer.trainCards.filter((c) => c.color === 'locomotive').length;
 
@@ -123,7 +164,6 @@ export const DevGameView: React.FC = () => {
       if ((colorCounts[selectedCardColor] || 0) + locoCount >= route.length) {
         requiredColor = selectedCardColor;
       } else {
-        // Find any color that meets the route length requirement
         const suitableColor = Object.keys(colorCounts).find(
           (col) => (colorCounts[col] || 0) + locoCount >= route.length
         );
@@ -137,7 +177,6 @@ export const DevGameView: React.FC = () => {
       }
     }
 
-    // Find cards matching requiredColor or locomotive
     const matchingCards = currentPlayer.trainCards.filter(
       (c) => c.color === requiredColor || c.color === 'locomotive'
     );
@@ -162,14 +201,29 @@ export const DevGameView: React.FC = () => {
     }
   };
 
+  // Render Lobby screen if no active game or if game.phase is 'lobby'
+  if (!game || game.phase === 'lobby') {
+    return (
+      <Lobby
+        game={game}
+        localPlayerId={localPlayerId}
+        onCreateGame={handleCreateGame}
+        onJoinGame={handleJoinGame}
+        onSelectColor={handleSelectColor}
+        onToggleReady={handleToggleReady}
+        onStartGame={handleStartGame}
+        errorMessage={errorMessage}
+      />
+    );
+  }
+
   const currentPlayer = game.currentPlayerId ? game.players[game.currentPlayerId] : null;
-  const selectedRoute = selectedRouteId ? game.boardState.routes[selectedRouteId] : null;
 
   return (
-    <div style={styles.container}>
+    <div style={styles.container} data-testid="in-game-container">
       <header style={styles.header}>
         <h1 style={styles.title}>Rails Between Us</h1>
-        <p style={styles.subtitle}>USA Game Board View</p>
+        <p style={styles.subtitle}>USA Game Board — In-Game ({game.gameId})</p>
       </header>
 
       {errorMessage && (
@@ -200,25 +254,13 @@ export const DevGameView: React.FC = () => {
 
       {/* Control Panel / Actions */}
       <div style={styles.controlGrid}>
-        {/* Add Player Box */}
+        {/* Controls / Turn Info */}
         <section style={styles.card}>
-          <h3>Add Players</h3>
-          {game.playerOrder.length < MAX_PLAYERS ? (
-            <form onSubmit={handleAddPlayer} style={styles.formRow}>
-              <input
-                type="text"
-                placeholder="Player name..."
-                value={newPlayerName}
-                onChange={(e) => setNewPlayerName(e.target.value)}
-                style={styles.input}
-              />
-              <button type="submit" style={styles.btnSuccess}>
-                + Add
-              </button>
-            </form>
-          ) : (
-            <p style={styles.mutedText}>Max players reached ({MAX_PLAYERS}).</p>
-          )}
+          <h3>Game Controls</h3>
+          <p style={styles.mutedText}>
+            Active Player:{' '}
+            <strong>{currentPlayer ? currentPlayer.displayName : 'None'}</strong>
+          </p>
 
           <div style={styles.btnRow}>
             <button
@@ -229,50 +271,18 @@ export const DevGameView: React.FC = () => {
               Advance Turn
             </button>
             <button style={styles.btnDanger} onClick={handleReset}>
-              Reset Game
+              Return to Lobby
             </button>
           </div>
         </section>
 
-        {/* Route Claiming Box */}
+        {/* Payment Card Color Selection for Board Route Claiming */}
         <section style={styles.card}>
-          <h3>Claim Route</h3>
+          <h3>Route Claim Settings</h3>
           {currentPlayer ? (
             <div style={styles.actionBox}>
               <div style={styles.formGroup}>
-                <label>Selected Route: </label>
-                <select
-                  value={selectedRouteId}
-                  onChange={(e) => setSelectedRouteId(e.target.value)}
-                  style={styles.select}
-                  data-testid="route-select-dropdown"
-                >
-                  <option value="">-- Click on map or choose route --</option>
-                  {Object.values(game.boardState.routes).map((r) => {
-                    const cityA = game.boardState.cities[r.cityA]?.name || r.cityA;
-                    const cityB = game.boardState.cities[r.cityB]?.name || r.cityB;
-                    const owner = r.ownerPlayerId
-                      ? game.players[r.ownerPlayerId]?.displayName
-                      : 'Unclaimed';
-                    return (
-                      <option key={r.routeId} value={r.routeId} disabled={r.ownerPlayerId !== null}>
-                        {cityA} ↔ {cityB} (Len: {r.length}, Req: {r.colorRequirement}) - [{owner}]
-                      </option>
-                    );
-                  })}
-                </select>
-              </div>
-
-              {selectedRoute && (
-                <div style={styles.selectedRouteInfo} data-testid="selected-route-info">
-                  <strong>Selected:</strong> {game.boardState.cities[selectedRoute.cityA]?.name} ↔{' '}
-                  {game.boardState.cities[selectedRoute.cityB]?.name} | Length: {selectedRoute.length} |
-                  Color: {selectedRoute.colorRequirement}
-                </div>
-              )}
-
-              <div style={styles.formGroup}>
-                <label>Select Card Color to Pay: </label>
+                <label>Card Color to Pay for 'Any' Color Routes: </label>
                 <select
                   value={selectedCardColor}
                   onChange={(e) => setSelectedCardColor(e.target.value as CardColor)}
@@ -287,17 +297,12 @@ export const DevGameView: React.FC = () => {
                   )}
                 </select>
               </div>
-
-              <button
-                style={styles.btnPrimary}
-                onClick={() => handleClaimRoute()}
-                data-testid="claim-route-control-btn"
-              >
-                Claim Selected Route
-              </button>
+              <p style={styles.mutedText}>
+                Click routes directly on the board to claim them.
+              </p>
             </div>
           ) : (
-            <p style={styles.mutedText}>Add players to start claiming routes.</p>
+            <p style={styles.mutedText}>No active player.</p>
           )}
         </section>
       </div>

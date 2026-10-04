@@ -214,6 +214,7 @@ describe('Destination Tickets', () => {
         playerId: 'p1',
         displayName: 'Alice',
         color: 'red',
+        ready: true,
         trainCards: [],
         destinationTickets: [
           { id: 't1', cityA: 'boston', cityB: 'washington', points: 8 }, // completed (+8)
