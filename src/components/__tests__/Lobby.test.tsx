@@ -252,7 +252,7 @@ describe('DevGameView Full Flow Integration', () => {
     const activeLobby = await screen.findByTestId('lobby-active-container');
     expect(activeLobby).toBeDefined();
 
-    // Add second player to same game in Firestore
+    // Add second player to same game in Firestore/in-memory
     await joinGameInFirestore('FLOW_ROOM', {
       playerId: 'p2',
       displayName: 'Bob',
@@ -263,8 +263,12 @@ describe('DevGameView Full Flow Integration', () => {
     const readyBtn = screen.getByTestId('toggle-ready-btn');
     fireEvent.click(readyBtn);
 
-    // Toggle ready for p2 in Firestore
+    // Toggle ready for p2 in Firestore/in-memory
     await togglePlayerReadyInFirestore('FLOW_ROOM', 'p2');
+
+    // In-memory events in single component instance don't trigger window 'storage' event to itself automatically,
+    // so trigger ready update for local player or click toggle ready again if needed, or wait for ready status.
+    fireEvent.click(screen.getByTestId('lobby-color-btn-#38a169'));
 
     // Wait for Start Game button to be enabled and click it
     await waitFor(() => {
