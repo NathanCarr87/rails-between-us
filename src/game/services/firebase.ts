@@ -18,23 +18,30 @@ import {
   togglePlayerReady,
 } from '../state/gameEngine';
 
-// Firebase configuration using standard env variables or fallback defaults for project rails-between-us-2fd0b
+// Firebase configuration using standard env variables for project rails-between-us-2fd0b
+const apiKey = import.meta.env?.VITE_FIREBASE_API_KEY || '';
+const authDomain = import.meta.env?.VITE_FIREBASE_AUTH_DOMAIN || 'rails-between-us-2fd0b.firebaseapp.com';
+const projectId = import.meta.env?.VITE_FIREBASE_PROJECT_ID || 'rails-between-us-2fd0b';
+const storageBucket = import.meta.env?.VITE_FIREBASE_STORAGE_BUCKET || 'rails-between-us-2fd0b.firebasestorage.app';
+const messagingSenderId = import.meta.env?.VITE_FIREBASE_MESSAGING_SENDER_ID || '';
+const appId = import.meta.env?.VITE_FIREBASE_APP_ID || '';
+
 const firebaseConfig = {
-  apiKey: import.meta.env?.VITE_FIREBASE_API_KEY || 'AIzaSyDummyKeyForRailsBetweenUsLocalDev',
-  authDomain: import.meta.env?.VITE_FIREBASE_AUTH_DOMAIN || 'rails-between-us-2fd0b.firebaseapp.com',
-  projectId: import.meta.env?.VITE_FIREBASE_PROJECT_ID || 'rails-between-us-2fd0b',
-  storageBucket: import.meta.env?.VITE_FIREBASE_STORAGE_BUCKET || 'rails-between-us-2fd0b.firebasestorage.app',
-  messagingSenderId: import.meta.env?.VITE_FIREBASE_MESSAGING_SENDER_ID || '1029384756',
-  appId: import.meta.env?.VITE_FIREBASE_APP_ID || '1:1029384756:web:abcdef123456',
+  apiKey,
+  authDomain,
+  projectId,
+  storageBucket,
+  messagingSenderId,
+  appId,
 };
 
 let app: FirebaseApp | undefined;
 let db: Firestore | undefined;
 
-// In unit test environment (Vitest / jsdom), avoid connecting to live Firestore with dummy API keys
+// Avoid connecting to Firebase if running in unit tests or if API key is not configured
 const isTestEnv = import.meta.env?.MODE === 'test';
 
-if (!isTestEnv) {
+if (!isTestEnv && apiKey) {
   try {
     app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
     db = getFirestore(app);
