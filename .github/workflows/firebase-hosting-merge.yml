@@ -29,8 +29,4 @@ jobs:
           firebaseServiceAccount: '${{ secrets.FIREBASE_SERVICE_ACCOUNT_RAILS_BETWEEN_US_2FD0B }}'
           channelId: live
           projectId: rails-between-us-2fd0b
-      - uses: google-github-actions/auth@v2
-        with:
-          credentials_json: '${{ secrets.FIREBASE_SERVICE_ACCOUNT_RAILS_BETWEEN_US_2FD0B }}'
-      - name: Deploy Firestore Rules
-        run: npx firebase-tools deploy --only firestore:rules --project rails-between-us-2fd0b
+     
