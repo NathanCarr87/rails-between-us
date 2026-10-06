@@ -7,6 +7,7 @@ import {
   getPlayerSession,
   joinGameInFirestore,
   savePlayerSession,
+  selectDestinationTicketsInFirestore,
   startGameInFirestore,
   subscribeToGame,
   togglePlayerReadyInFirestore,
@@ -16,6 +17,7 @@ import { GameBoard } from './GameBoard';
 import { PlayerStatus } from './PlayerStatus';
 import { PlayerHand } from './PlayerHand';
 import { Lobby } from './Lobby';
+import { DestinationTicketModal } from './DestinationTicketModal';
 
 export const DevGameView: React.FC = () => {
   const [activeGameId, setActiveGameId] = useState<string>(() => {
@@ -150,6 +152,45 @@ export const DevGameView: React.FC = () => {
       const updatedGame = await executeTurnActionInFirestore(activeGameId, playerId, {
         type: 'DRAW_TRAIN_CARDS',
       });
+      setGame(updatedGame);
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        setErrorMessage(err.message);
+      }
+    }
+  };
+
+  const handleDrawDestinationTickets = async (playerId: string) => {
+    if (!game || !activeGameId) return;
+    setErrorMessage(null);
+
+    if (game.currentPlayerId !== localPlayerId) {
+      setErrorMessage("It is not your turn!");
+      return;
+    }
+
+    try {
+      const updatedGame = await executeTurnActionInFirestore(activeGameId, playerId, {
+        type: 'DRAW_DESTINATION_TICKETS',
+      });
+      setGame(updatedGame);
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        setErrorMessage(err.message);
+      }
+    }
+  };
+
+  const handleConfirmTicketSelection = async (keptTicketIds: string[]) => {
+    if (!game || !activeGameId || !localPlayerId) return;
+    setErrorMessage(null);
+
+    try {
+      const updatedGame = await selectDestinationTicketsInFirestore(
+        activeGameId,
+        localPlayerId,
+        keptTicketIds
+      );
       setGame(updatedGame);
     } catch (err: unknown) {
       if (err instanceof Error) {
@@ -296,13 +337,32 @@ export const DevGameView: React.FC = () => {
         </div>
       )}
 
+      {/* Pending Destination Tickets Modal */}
+      {localPlayer?.pendingDestinationTickets &&
+        localPlayer.pendingDestinationTickets.length > 0 && (
+          <DestinationTicketModal
+            pendingTickets={localPlayer.pendingDestinationTickets}
+            cities={game.boardState.cities}
+            onConfirmSelection={handleConfirmTicketSelection}
+          />
+        )}
+
       {/* Status Area */}
-      <PlayerStatus game={game} localPlayerId={localPlayerId} onDrawCards={handleDrawCards} />
+      <PlayerStatus
+        game={game}
+        localPlayerId={localPlayerId}
+        onDrawCards={handleDrawCards}
+        onDrawDestinationTickets={handleDrawDestinationTickets}
+      />
 
       {/* Local Player Hand */}
       {localPlayer && (
         <PlayerHand
           cards={localPlayer.trainCards}
+          destinationTickets={localPlayer.destinationTickets}
+          cities={game.boardState.cities}
+          routes={game.boardState.routes}
+          claimedRoutes={localPlayer.claimedRoutes}
           isCurrentTurn={isLocalTurn}
           selectedColor={selectedCardColor}
           onSelectColor={setSelectedCardColor}

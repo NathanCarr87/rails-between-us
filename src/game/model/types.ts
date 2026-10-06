@@ -47,6 +47,7 @@ export interface Player {
   ready: boolean;
   trainCards: TrainCard[];
   destinationTickets: DestinationTicket[];
+  pendingDestinationTickets?: DestinationTicket[];
   claimedRoutes: string[]; // routeIds
   trainsRemaining: number;
   score: number;
@@ -90,9 +91,16 @@ export interface ClaimRouteAction {
 export interface DrawDestinationTicketsAction {
   type: 'DRAW_DESTINATION_TICKETS';
   count?: number;
+  keptTicketIds?: string[];
+}
+
+export interface SelectDestinationTicketsAction {
+  type: 'SELECT_DESTINATION_TICKETS';
+  keptTicketIds: string[];
 }
 
 export type PlayerAction =
   | DrawTrainCardsAction
   | ClaimRouteAction
-  | DrawDestinationTicketsAction;
+  | DrawDestinationTicketsAction
+  | SelectDestinationTicketsAction;

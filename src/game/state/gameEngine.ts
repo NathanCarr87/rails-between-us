@@ -142,12 +142,47 @@ export function startGame(game: Game): Game {
   const currentPlayerId = game.currentPlayerId ?? game.playerOrder[0];
   const turnNumber = game.turnNumber === 0 ? 1 : game.turnNumber;
 
+  let currentTrainDeck = [...game.trainCardDeck];
+  let currentTicketDeck = [...game.destinationTicketDeck];
+  const updatedPlayers: Record<string, Player> = { ...game.players };
+
+  for (const pid of game.playerOrder) {
+    const p = updatedPlayers[pid];
+    if (!p) continue;
+
+    let trainCards = [...p.trainCards];
+    if (trainCards.length === 0) {
+      for (let i = 0; i < 4; i++) {
+        const card = currentTrainDeck.pop();
+        if (card) trainCards.push(card);
+      }
+    }
+
+    let pendingTickets = p.pendingDestinationTickets ? [...p.pendingDestinationTickets] : [];
+    if (pendingTickets.length === 0 && p.destinationTickets.length === 0) {
+      for (let i = 0; i < 3; i++) {
+        const t = currentTicketDeck.pop();
+        if (t) pendingTickets.push(t);
+      }
+    }
+
+    updatedPlayers[pid] = {
+      ...p,
+      trainCards,
+      pendingDestinationTickets: pendingTickets,
+      destinationTickets: p.destinationTickets ?? [],
+    };
+  }
+
   return {
     ...game,
     phase: 'playing',
     status: 'active',
     currentPlayerId,
     turnNumber,
+    players: updatedPlayers,
+    trainCardDeck: currentTrainDeck,
+    destinationTicketDeck: currentTicketDeck,
     updatedAt: Date.now(),
   };
 }
@@ -447,10 +482,10 @@ export function selectDestinationTickets(
     throw new Error(`Player ${playerId} does not exist.`);
   }
 
-  // Update player tickets
   const updatedPlayer: Player = {
     ...player,
     destinationTickets: [...player.destinationTickets, ...keptTickets],
+    pendingDestinationTickets: [],
   };
 
   // Return unselected tickets to the bottom of the destination ticket deck
@@ -465,6 +500,36 @@ export function selectDestinationTickets(
     destinationTicketDeck: updatedDeck,
     updatedAt: Date.now(),
   };
+}
+
+export function confirmDestinationTicketSelection(
+  game: Game,
+  playerId: string,
+  keptTicketIds: string[],
+  isTurnAction: boolean = false
+): Game {
+  const player = game.players[playerId];
+  if (!player) {
+    throw new Error(`Player ${playerId} does not exist.`);
+  }
+
+  const pending = player.pendingDestinationTickets ?? [];
+  let keptTickets: DestinationTicket[] = [];
+  let unselectedTickets: DestinationTicket[] = [];
+
+  if (pending.length > 0) {
+    keptTickets = pending.filter((t) => keptTicketIds.includes(t.id));
+    unselectedTickets = pending.filter((t) => !keptTicketIds.includes(t.id));
+  }
+
+  const updatedGame = selectDestinationTickets(game, playerId, keptTickets, unselectedTickets);
+
+  // Advance turn only if this ticket selection was performed as an active turn action
+  if (isTurnAction && game.phase === 'playing' && game.currentPlayerId === playerId) {
+    return advanceTurn(updatedGame);
+  }
+
+  return updatedGame;
 }
 
 export function areCitiesConnected(
@@ -600,7 +665,8 @@ export function executeClaimRouteTurn(
 export function executeDrawDestinationTicketsTurn(
   game: Game,
   playerId: string,
-  count: number = 3
+  count: number = 3,
+  keptTicketIds?: string[]
 ): Game {
   if (game.currentPlayerId !== playerId) {
     throw new Error(`Cannot draw destination tickets: Not player ${playerId}'s turn.`);
@@ -609,21 +675,31 @@ export function executeDrawDestinationTicketsTurn(
   const { game: updatedGame, drawnTickets } = drawDestinationTickets(game, playerId, count);
   const player = updatedGame.players[playerId];
 
-  const updatedPlayer: Player = {
-    ...player,
-    destinationTickets: [...player.destinationTickets, ...drawnTickets],
-  };
+  if (keptTicketIds !== undefined) {
+    const keptTickets = drawnTickets.filter((t) => keptTicketIds.includes(t.id));
+    const unselectedTickets = drawnTickets.filter((t) => !keptTicketIds.includes(t.id));
+    const gameWithSelected = selectDestinationTickets(
+      updatedGame,
+      playerId,
+      keptTickets,
+      unselectedTickets
+    );
+    return advanceTurn(gameWithSelected);
+  } else {
+    const updatedPlayer: Player = {
+      ...player,
+      pendingDestinationTickets: [...(player.pendingDestinationTickets || []), ...drawnTickets],
+    };
 
-  const gameWithTickets: Game = {
-    ...updatedGame,
-    players: {
-      ...updatedGame.players,
-      [playerId]: updatedPlayer,
-    },
-    updatedAt: Date.now(),
-  };
-
-  return advanceTurn(gameWithTickets);
+    return {
+      ...updatedGame,
+      players: {
+        ...updatedGame.players,
+        [playerId]: updatedPlayer,
+      },
+      updatedAt: Date.now(),
+    };
+  }
 }
 
 export function executeTurnAction(game: Game, playerId: string, action: PlayerAction): Game {
@@ -633,7 +709,14 @@ export function executeTurnAction(game: Game, playerId: string, action: PlayerAc
     case 'CLAIM_ROUTE':
       return executeClaimRouteTurn(game, playerId, action.routeId, action.cardsToUse);
     case 'DRAW_DESTINATION_TICKETS':
-      return executeDrawDestinationTicketsTurn(game, playerId, action.count ?? 3);
+      return executeDrawDestinationTicketsTurn(
+        game,
+        playerId,
+        action.count ?? 3,
+        action.keptTicketIds
+      );
+    case 'SELECT_DESTINATION_TICKETS':
+      return confirmDestinationTicketSelection(game, playerId, action.keptTicketIds, true);
     default: {
       const _exhaustiveCheck: never = action;
       throw new Error(`Unhandled action type: ${JSON.stringify(_exhaustiveCheck)}`);
