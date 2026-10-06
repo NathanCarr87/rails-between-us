@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-test.describe('Rails Between Us - E2E Gameplay Suite', () => {
+test.describe('Rails Between Us - E2E Multiplayer Gameplay Suite', () => {
   test('1. Create Game - verify lobby setup and creator player', async ({ page }) => {
     const gameId = `e2e_create_${Date.now()}`;
     await page.goto('/');
@@ -60,12 +60,13 @@ test.describe('Rails Between Us - E2E Gameplay Suite', () => {
       await expect(page1.getByTestId('in-game-container')).toBeVisible();
       await expect(page2.getByTestId('in-game-container')).toBeVisible();
 
-      // Wait for pending destination ticket modals to appear and confirm selection
+      // Confirm initial ticket selection on page 1
       const modal1 = page1.getByTestId('destination-ticket-modal');
       await expect(modal1).toBeVisible();
       await page1.getByTestId('confirm-tickets-btn').click();
       await expect(modal1).toBeHidden();
 
+      // Confirm initial ticket selection on page 2
       const modal2 = page2.getByTestId('destination-ticket-modal');
       await expect(modal2).toBeVisible();
       await page2.getByTestId('confirm-tickets-btn').click();
