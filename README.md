@@ -1,32 +1,37 @@
-# React + TypeScript + Vite
+# Rails Between Us
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+A multiplayer train adventure board game web application built with React, TypeScript, Vite, and Firebase Firestore.
 
-Currently, two official plugins are available:
+## Getting Started
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
-
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+### Development
+```bash
+npm run dev
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+### Building & Testing
+```bash
+npm run build
+npm run test         # Run unit tests (Vitest)
+npm run test:e2e     # Run end-to-end browser tests (Playwright)
+npm run test:e2e:ui  # Run Playwright E2E tests with interactive UI mode
+npm run lint         # Run Oxlint
+```
+
+## E2E Testing Architecture (Playwright)
+
+End-to-end browser tests are located in `e2e/`. They test real browser flows against the built application.
+
+### Running E2E Tests
+```bash
+npm run test:e2e
+```
+
+### Environment Variables & Secrets for CI/Firebase
+For live Firebase multiplayer environment tests or deployment in GitHub Actions, supply the following environment variables:
+- `VITE_FIREBASE_API_KEY`
+- `VITE_FIREBASE_AUTH_DOMAIN`
+- `VITE_FIREBASE_PROJECT_ID`
+- `VITE_FIREBASE_STORAGE_BUCKET`
+- `VITE_FIREBASE_MESSAGING_SENDER_ID`
+- `VITE_FIREBASE_APP_ID`
