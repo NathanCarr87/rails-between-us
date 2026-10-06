@@ -10,9 +10,11 @@ import {
   type Unsubscribe,
 } from 'firebase/firestore';
 import type { Game } from '../model/types';
+import type { PlayerAction } from '../model/types';
 import {
   addPlayer,
   createGame,
+  executeTurnAction,
   setPlayerColor,
   startGame as engineStartGame,
   togglePlayerReady,
@@ -57,6 +59,7 @@ const inMemoryGames = new Map<string, Game>();
 const inMemoryListeners = new Map<string, Set<(game: Game | null) => void>>();
 
 function saveLocalGame(gameId: string, game: Game | null): void {
+  if (typeof localStorage === 'undefined') return;
   try {
     const key = `rails_game_${gameId}`;
     const newValue = game ? JSON.stringify(game) : null;
@@ -79,6 +82,7 @@ function saveLocalGame(gameId: string, game: Game | null): void {
 }
 
 function getLocalGame(gameId: string): Game | null {
+  if (typeof localStorage === 'undefined') return null;
   try {
     const data = localStorage.getItem(`rails_game_${gameId}`);
     return data ? JSON.parse(data) : null;
@@ -342,6 +346,64 @@ export async function togglePlayerReadyInFirestore(
       throw new Error(`Game ${gameId} does not exist.`);
     }
     updatedGame = togglePlayerReady(memGame, playerId);
+  }
+
+  inMemoryGames.set(gameId, updatedGame);
+  saveLocalGame(gameId, updatedGame);
+  notifyMemoryListeners(gameId, updatedGame);
+  return updatedGame;
+}
+
+/**
+ * Executes a turn action in Firestore using an atomic transaction.
+ */
+export async function executeTurnActionInFirestore(
+  gameId: string,
+  playerId: string,
+  action: PlayerAction
+): Promise<Game> {
+  let updatedGame: Game;
+
+  if (db) {
+    try {
+      const gameRef = doc(db, 'games', gameId);
+      updatedGame = await runTransaction(db, async (transaction) => {
+        const snap = await transaction.get(gameRef);
+
+        if (!snap.exists()) {
+          throw new Error(`Game ${gameId} does not exist.`);
+        }
+
+        const existingGame = snap.data() as Game;
+
+        if (existingGame.phase !== 'playing') {
+          throw new Error(`Game ${gameId} is not currently active.`);
+        }
+
+        if (existingGame.currentPlayerId !== playerId) {
+          throw new Error(`It is not player ${playerId}'s turn.`);
+        }
+
+        const nextGame = executeTurnAction(existingGame, playerId, action);
+        transaction.set(gameRef, nextGame);
+        return nextGame;
+      });
+    } catch (err) {
+      console.error('Firestore transaction error executing turn action:', err);
+      throw err;
+    }
+  } else {
+    const memGame = inMemoryGames.get(gameId) || getLocalGame(gameId);
+    if (!memGame) {
+      throw new Error(`Game ${gameId} does not exist.`);
+    }
+    if (memGame.phase !== 'playing') {
+      throw new Error(`Game ${gameId} is not currently active.`);
+    }
+    if (memGame.currentPlayerId !== playerId) {
+      throw new Error(`It is not player ${playerId}'s turn.`);
+    }
+    updatedGame = executeTurnAction(memGame, playerId, action);
   }
 
   inMemoryGames.set(gameId, updatedGame);
