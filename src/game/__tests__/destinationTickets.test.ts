@@ -13,6 +13,7 @@ import {
   drawDestinationTickets,
   isTicketCompleted,
   selectDestinationTickets,
+  startGame,
 } from '../state/gameEngine';
 import type { DestinationTicket } from '../model/types';
 
@@ -66,6 +67,20 @@ describe('Destination Tickets', () => {
     // Unselected ticket returned to deck
     expect(gameAfterSelection.destinationTicketDeck).toHaveLength(deckSizeAfterDraw + 1);
     expect(gameAfterSelection.destinationTicketDeck[0]).toEqual(returned1);
+  });
+
+  it('deals 3 initial pending destination tickets to each player when game starts', () => {
+    let game = createGame();
+    game = addPlayer(game, { playerId: 'p1', displayName: 'Alice', color: 'red' });
+    game = addPlayer(game, { playerId: 'p2', displayName: 'Bob', color: 'blue' });
+
+    const initialDeckSize = game.destinationTicketDeck.length;
+
+    const startedGame = startGame(game);
+
+    expect(startedGame.players.p1.pendingDestinationTickets).toHaveLength(3);
+    expect(startedGame.players.p2.pendingDestinationTickets).toHaveLength(3);
+    expect(startedGame.destinationTicketDeck).toHaveLength(initialDeckSize - 6);
   });
 
   it('handles empty destination deck when drawing', () => {

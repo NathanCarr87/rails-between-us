@@ -1,8 +1,13 @@
 import React from 'react';
-import type { CardColor, TrainCard } from '../game/model/types';
+import type { CardColor, City, DestinationTicket, Route, TrainCard } from '../game/model/types';
+import { isTicketCompleted } from '../game/state/gameEngine';
 
 export interface PlayerHandProps {
   cards: TrainCard[];
+  destinationTickets?: DestinationTicket[];
+  cities?: Record<string, City>;
+  routes?: Record<string, Route>;
+  claimedRoutes?: string[];
   isCurrentTurn?: boolean;
   selectedColor?: CardColor;
   onSelectColor?: (color: CardColor) => void;
@@ -34,6 +39,10 @@ const ALL_COLORS: CardColor[] = [
 
 export const PlayerHand: React.FC<PlayerHandProps> = ({
   cards,
+  destinationTickets = [],
+  cities = {},
+  routes = {},
+  claimedRoutes = [],
   isCurrentTurn = false,
   selectedColor,
   onSelectColor,
@@ -96,6 +105,50 @@ export const PlayerHand: React.FC<PlayerHandProps> = ({
           })}
         </div>
       )}
+
+      {/* Local Player's Destination Tickets Section */}
+      <div style={styles.ticketsSection} data-testid="player-tickets-section">
+        <h4 style={styles.subTitle}>Your Destination Tickets ({destinationTickets.length})</h4>
+        {destinationTickets.length === 0 ? (
+          <p style={styles.emptyText}>You have no active destination tickets.</p>
+        ) : (
+          <div style={styles.ticketGrid}>
+            {destinationTickets.map((ticket) => {
+              const cityAName = cities[ticket.cityA]?.name || ticket.cityA;
+              const cityBName = cities[ticket.cityB]?.name || ticket.cityB;
+              const completed = isTicketCompleted(ticket, claimedRoutes, routes);
+
+              return (
+                <div
+                  key={ticket.id}
+                  style={{
+                    ...styles.ticketBadge,
+                    borderColor: completed ? '#38a169' : '#cbd5e0',
+                    backgroundColor: completed ? '#f0fff4' : '#f7fafc',
+                  }}
+                  data-testid={`kept-ticket-${ticket.id}`}
+                >
+                  <div style={styles.ticketHeader}>
+                    <span style={styles.ticketRoute}>
+                      <strong>{cityAName}</strong> ➔ <strong>{cityBName}</strong>
+                    </span>
+                    <span style={styles.ticketPoints}>{ticket.points} pts</span>
+                  </div>
+                  <span
+                    style={{
+                      ...styles.statusBadge,
+                      backgroundColor: completed ? '#c6f6d5' : '#e2e8f0',
+                      color: completed ? '#22543d' : '#4a5568',
+                    }}
+                  >
+                    {completed ? '✓ Completed' : 'Incomplete'}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
     </div>
   );
 };
@@ -157,5 +210,54 @@ const styles: Record<string, React.CSSProperties> = {
   cardCount: {
     fontSize: '20px',
     fontWeight: '800',
+  },
+  ticketsSection: {
+    marginTop: '12px',
+    paddingTop: '12px',
+    borderTop: '1px solid #e2e8f0',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '8px',
+  },
+  subTitle: {
+    margin: 0,
+    fontSize: '15px',
+    color: '#2d3748',
+  },
+  ticketGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
+    gap: '10px',
+  },
+  ticketBadge: {
+    padding: '10px 12px',
+    borderRadius: '8px',
+    border: '1px solid',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '6px',
+    boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+  },
+  ticketHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: '6px',
+  },
+  ticketRoute: {
+    fontSize: '13px',
+    color: '#2d3748',
+  },
+  ticketPoints: {
+    fontWeight: 'bold',
+    fontSize: '12px',
+    color: '#2b6cb0',
+  },
+  statusBadge: {
+    alignSelf: 'flex-start',
+    fontSize: '11px',
+    fontWeight: '600',
+    padding: '2px 6px',
+    borderRadius: '4px',
   },
 };

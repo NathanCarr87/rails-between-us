@@ -13,6 +13,7 @@ import type { Game } from '../model/types';
 import type { PlayerAction } from '../model/types';
 import {
   addPlayer,
+  confirmDestinationTicketSelection,
   createGame,
   executeTurnAction,
   setPlayerColor,
@@ -346,6 +347,49 @@ export async function togglePlayerReadyInFirestore(
       throw new Error(`Game ${gameId} does not exist.`);
     }
     updatedGame = togglePlayerReady(memGame, playerId);
+  }
+
+  inMemoryGames.set(gameId, updatedGame);
+  saveLocalGame(gameId, updatedGame);
+  notifyMemoryListeners(gameId, updatedGame);
+  return updatedGame;
+}
+
+/**
+ * Selects destination tickets in Firestore using an atomic transaction.
+ */
+export async function selectDestinationTicketsInFirestore(
+  gameId: string,
+  playerId: string,
+  keptTicketIds: string[]
+): Promise<Game> {
+  let updatedGame: Game;
+
+  if (db) {
+    try {
+      const gameRef = doc(db, 'games', gameId);
+      updatedGame = await runTransaction(db, async (transaction) => {
+        const snap = await transaction.get(gameRef);
+
+        if (!snap.exists()) {
+          throw new Error(`Game ${gameId} does not exist.`);
+        }
+
+        const existingGame = snap.data() as Game;
+        const nextGame = confirmDestinationTicketSelection(existingGame, playerId, keptTicketIds);
+        transaction.set(gameRef, nextGame);
+        return nextGame;
+      });
+    } catch (err) {
+      console.error('Firestore transaction error selecting destination tickets:', err);
+      throw err;
+    }
+  } else {
+    const memGame = inMemoryGames.get(gameId) || getLocalGame(gameId);
+    if (!memGame) {
+      throw new Error(`Game ${gameId} does not exist.`);
+    }
+    updatedGame = confirmDestinationTicketSelection(memGame, playerId, keptTicketIds);
   }
 
   inMemoryGames.set(gameId, updatedGame);

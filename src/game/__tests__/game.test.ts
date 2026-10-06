@@ -240,7 +240,7 @@ describe('Game Domain Model & Rules', () => {
       expect(game.turnNumber).toBe(2);
     });
 
-    it('draws destination tickets and advances turn', () => {
+    it('draws destination tickets into pending and advances turn upon selection', () => {
       let game = createGame();
       game = addPlayer(game, { playerId: 'p1', displayName: 'Alice', color: '#e53e3e' });
       game = addPlayer(game, { playerId: 'p2', displayName: 'Bob', color: '#3182ce' });
@@ -249,10 +249,21 @@ describe('Game Domain Model & Rules', () => {
       expect(game.currentPlayerId).toBe('p1');
       const initialTicketDeckCount = game.destinationTicketDeck.length;
 
+      // Draw destination tickets action puts drawn tickets into pending
       game = executeTurnAction(game, 'p1', { type: 'DRAW_DESTINATION_TICKETS' });
 
-      expect(game.players.p1.destinationTickets.length).toBe(3);
+      expect(game.players.p1.pendingDestinationTickets?.length).toBeGreaterThan(0);
       expect(game.destinationTicketDeck.length).toBe(initialTicketDeckCount - 3);
+
+      // Select destination tickets action keeps selected tickets and advances turn
+      const pendingIds = (game.players.p1.pendingDestinationTickets || []).map((t) => t.id);
+      game = executeTurnAction(game, 'p1', {
+        type: 'SELECT_DESTINATION_TICKETS',
+        keptTicketIds: pendingIds,
+      });
+
+      expect(game.players.p1.destinationTickets.length).toBeGreaterThanOrEqual(3);
+      expect(game.players.p1.pendingDestinationTickets).toHaveLength(0);
       expect(game.currentPlayerId).toBe('p2');
       expect(game.turnNumber).toBe(2);
     });
@@ -289,12 +300,13 @@ describe('Game Domain Model & Rules', () => {
       let game = await startGameInFirestore(gameId);
 
       expect(game.currentPlayerId).toBe('p1');
-      expect(game.players.p1.trainCards.length).toBe(0);
+      // Game start deals 4 initial train cards
+      expect(game.players.p1.trainCards.length).toBe(4);
 
       // p1 draws cards
       game = await executeTurnActionInFirestore(gameId, 'p1', { type: 'DRAW_TRAIN_CARDS' });
 
-      expect(game.players.p1.trainCards.length).toBe(2);
+      expect(game.players.p1.trainCards.length).toBe(6);
       expect(game.currentPlayerId).toBe('p2');
 
       // Attempt by p1 out of turn fails
@@ -302,9 +314,9 @@ describe('Game Domain Model & Rules', () => {
         executeTurnActionInFirestore(gameId, 'p1', { type: 'DRAW_TRAIN_CARDS' })
       ).rejects.toThrow(/not player p1's turn/i);
 
-      // p2 draws cards
+      // p2 draws cards (p2 started with 4 cards, draws 2 -> 6)
       game = await executeTurnActionInFirestore(gameId, 'p2', { type: 'DRAW_TRAIN_CARDS' });
-      expect(game.players.p2.trainCards.length).toBe(2);
+      expect(game.players.p2.trainCards.length).toBe(6);
       expect(game.currentPlayerId).toBe('p1');
     });
   });

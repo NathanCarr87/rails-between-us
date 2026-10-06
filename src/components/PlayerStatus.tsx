@@ -5,9 +5,15 @@ export interface PlayerStatusProps {
   game: Game;
   localPlayerId?: string;
   onDrawCards?: (playerId: string) => void;
+  onDrawDestinationTickets?: (playerId: string) => void;
 }
 
-export const PlayerStatus: React.FC<PlayerStatusProps> = ({ game, localPlayerId, onDrawCards }) => {
+export const PlayerStatus: React.FC<PlayerStatusProps> = ({
+  game,
+  localPlayerId,
+  onDrawCards,
+  onDrawDestinationTickets,
+}) => {
   const currentPlayer = game.currentPlayerId ? game.players[game.currentPlayerId] : null;
   const isLocalTurn = localPlayerId && localPlayerId === game.currentPlayerId;
 
@@ -30,8 +36,12 @@ export const PlayerStatus: React.FC<PlayerStatusProps> = ({ game, localPlayerId,
           </span>
         </div>
         <div style={styles.statusItem}>
-          <span style={styles.label}>Deck:</span>
+          <span style={styles.label}>Train Deck:</span>
           <span>{game.trainCardDeck.length} cards</span>
+        </div>
+        <div style={styles.statusItem}>
+          <span style={styles.label}>Ticket Deck:</span>
+          <span>{game.destinationTicketDeck.length} tickets</span>
         </div>
       </div>
 
@@ -60,22 +70,39 @@ export const PlayerStatus: React.FC<PlayerStatusProps> = ({ game, localPlayerId,
                 <div>Score: <strong>{player.score}</strong></div>
                 <div>Trains: <strong>{player.trainsRemaining}</strong></div>
                 <div>Cards: <strong>{player.trainCards.length}</strong></div>
+                <div>Tickets: <strong>{player.destinationTickets?.length ?? 0}</strong></div>
                 <div>Routes: <strong>{player.claimedRoutes.length}</strong></div>
               </div>
 
-              {onDrawCards && pid === localPlayerId && (
+              {pid === localPlayerId && (onDrawCards || onDrawDestinationTickets) && (
                 <div style={styles.actions}>
-                  <button
-                    style={{
-                      ...styles.btnDraw,
-                      opacity: isCurrent && isLocalTurn ? 1 : 0.5,
-                      cursor: isCurrent && isLocalTurn ? 'pointer' : 'not-allowed',
-                    }}
-                    onClick={() => onDrawCards(pid)}
-                    disabled={!isCurrent || !isLocalTurn || game.trainCardDeck.length + game.trainCardDiscardPile.length === 0}
-                  >
-                    {isLocalTurn ? 'Draw 2 Cards' : 'Not Your Turn'}
-                  </button>
+                  {onDrawCards && (
+                    <button
+                      style={{
+                        ...styles.btnDraw,
+                        opacity: isCurrent && isLocalTurn ? 1 : 0.5,
+                        cursor: isCurrent && isLocalTurn ? 'pointer' : 'not-allowed',
+                      }}
+                      onClick={() => onDrawCards(pid)}
+                      disabled={!isCurrent || !isLocalTurn || game.trainCardDeck.length + game.trainCardDiscardPile.length === 0}
+                    >
+                      {isLocalTurn ? 'Draw 2 Cards' : 'Not Your Turn'}
+                    </button>
+                  )}
+                  {onDrawDestinationTickets && (
+                    <button
+                      style={{
+                        ...styles.btnDraw,
+                        opacity: isCurrent && isLocalTurn ? 1 : 0.5,
+                        cursor: isCurrent && isLocalTurn ? 'pointer' : 'not-allowed',
+                      }}
+                      onClick={() => onDrawDestinationTickets(pid)}
+                      disabled={!isCurrent || !isLocalTurn || game.destinationTicketDeck.length === 0}
+                      data-testid="draw-tickets-btn"
+                    >
+                      {isLocalTurn ? 'Draw Tickets' : 'Not Your Turn'}
+                    </button>
+                  )}
                 </div>
               )}
             </div>
@@ -173,10 +200,12 @@ const styles: Record<string, React.CSSProperties> = {
   },
   actions: {
     marginTop: '10px',
+    display: 'flex',
+    gap: '6px',
   },
   btnDraw: {
-    width: '100%',
-    padding: '6px 10px',
+    flex: 1,
+    padding: '6px 8px',
     backgroundColor: '#edf2f7',
     border: '1px solid #cbd5e0',
     borderRadius: '6px',
