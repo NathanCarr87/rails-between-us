@@ -4,8 +4,14 @@ service cloud.firestore {
   match /databases/{database}/documents {
     // Game collection rules for unauthenticated multiplayer gameplay
     match /games/{gameId} {
-      // Allow reading and writing game documents for unauthenticated multiplayer gameplay
-      allow read, write: if true;
+      // Allow unauthenticated clients to read game documents
+      allow read: if true;
+
+      // Allow unauthenticated clients to create a game if gameId matches path
+      allow create: if request.resource.data.gameId == gameId;
+
+      // Allow unauthenticated clients to update a game if gameId matches path
+      allow update: if request.resource.data.gameId == gameId;
     }
   }
 }
