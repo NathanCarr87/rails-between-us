@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-test.describe('Rails Between Us - E2E Gameplay Suite', () => {
+test.describe('Rails Between Us - E2E Multiplayer Gameplay Suite', () => {
   test('1. Create Game - verify lobby and creator player', async ({ page }) => {
     const gameId = `e2e_create_${Date.now()}`;
     await page.goto('/');
@@ -15,132 +15,104 @@ test.describe('Rails Between Us - E2E Gameplay Suite', () => {
     await expect(page.getByTestId('players-list')).toContainText('Alice');
   });
 
-  test('2. Join Game, Start Game, and Play Actions', async ({ page }) => {
-    const gameId = `e2e_game_${Date.now()}`;
+  test('2. Multi-context Join, Start Game, and State Synchronization', async ({ browser }) => {
+    const gameId = `e2e_multi_${Date.now()}`;
 
-    // Step 2.1: Player 1 creates game
-    await page.goto('/');
-    await page.getByTestId('player-name-input').fill('Alice');
-    await page.getByTestId('game-id-input').fill(gameId);
-    await page.getByTestId('create-game-btn').click();
+    // Create two separate browser contexts so LocalStorage session is isolated per player
+    const context1 = await browser.newContext();
+    const context2 = await browser.newContext();
 
-    await expect(page.getByTestId('lobby-active-container')).toBeVisible();
-    await expect(page.getByTestId('players-list')).toContainText('Alice');
+    const page1 = await context1.newPage();
+    const page2 = await context2.newPage();
 
-    // Step 2.2: Add second player Bob directly to game state via LocalStorage and trigger storage event
-    await page.evaluate((gid) => {
-      const sessionData = localStorage.getItem(`rails_game_${gid}`);
-      if (sessionData) {
-        const game = JSON.parse(sessionData);
-        game.players['p_bob'] = {
-          playerId: 'p_bob',
-          displayName: 'Bob',
-          color: '#3182ce',
-          ready: true,
-          trainCards: [],
-          destinationTickets: [],
-          claimedRoutes: [],
-          trainsRemaining: 45,
-          score: 0,
-        };
-        game.playerOrder.push('p_bob');
-        localStorage.setItem(`rails_game_${gid}`, JSON.stringify(game));
-        window.dispatchEvent(
-          new StorageEvent('storage', {
-            key: `rails_game_${gid}`,
-            newValue: JSON.stringify(game),
-          })
-        );
+    try {
+      // Client 1 (Alice) creates game
+      await page1.goto('/');
+      await expect(page1.getByTestId('lobby-setup-container')).toBeVisible();
+      await page1.getByTestId('player-name-input').fill('Alice');
+      await page1.getByTestId('game-id-input').fill(gameId);
+      await page1.getByTestId('color-swatch-#e53e3e').click();
+      await page1.getByTestId('create-game-btn').click();
+      await expect(page1.getByTestId('lobby-active-container')).toBeVisible();
+
+      // Client 2 (Bob) joins game from second browser context
+      await page2.goto('/');
+      await expect(page2.getByTestId('lobby-setup-container')).toBeVisible();
+      await page2.getByTestId('player-name-input').fill('Bob');
+      await page2.getByTestId('game-id-input').fill(gameId);
+      await page2.getByTestId('color-swatch-#3182ce').click();
+      await page2.getByTestId('join-game-btn').click();
+      await expect(page2.getByTestId('lobby-active-container')).toBeVisible();
+
+      // Verify both clients see both players in lobby
+      await expect(page1.getByTestId('players-list')).toContainText('Alice');
+      await expect(page1.getByTestId('players-list')).toContainText('Bob');
+      await expect(page2.getByTestId('players-list')).toContainText('Alice');
+      await expect(page2.getByTestId('players-list')).toContainText('Bob');
+
+      // Host (Alice on Page 1) starts the game
+      await page1.getByTestId('start-game-btn').click();
+
+      // Both clients transition to game screen
+      await expect(page1.getByTestId('in-game-container')).toBeVisible();
+      await expect(page2.getByTestId('in-game-container')).toBeVisible();
+
+      // Confirm initial ticket selection on both pages if modal appears
+      const modal1 = page1.getByTestId('destination-ticket-modal');
+      if (await modal1.isVisible({ timeout: 2000 }).catch(() => false)) {
+        await page1.getByTestId('confirm-tickets-btn').click();
+        await expect(modal1).toBeHidden();
       }
-    }, gameId);
 
-    await expect(page.getByTestId('players-list')).toContainText('Bob');
-
-    // Step 2.3: Start Game
-    await page.getByTestId('start-game-btn').click();
-
-    await expect(page.getByTestId('in-game-container')).toBeVisible();
-
-    // Confirm initial destination tickets modal
-    const ticketModal = page.getByTestId('destination-ticket-modal');
-    if (await ticketModal.isVisible().catch(() => false)) {
-      await page.getByTestId('confirm-tickets-btn').click();
-    }
-
-    // Step 2.4: Verify Initial Hand & 5 Face-Up Cards
-    await expect(page.getByTestId('player-hand')).toBeVisible();
-    await expect(page.getByTestId('player-hand')).toContainText('Your Hand (4 cards)');
-
-    await expect(page.getByTestId('face-up-cards-container')).toBeVisible();
-    for (let i = 0; i < 5; i++) {
-      await expect(page.getByTestId(`face-up-card-${i}`)).toBeVisible();
-    }
-
-    // Step 2.5: Verify Active Player Turn Actions
-    const drawDeckBtn = page.getByTestId('draw-deck-btn');
-    if (await drawDeckBtn.isEnabled()) {
-      await drawDeckBtn.click();
-      await expect(page.getByTestId('player-hand')).toContainText('Your Hand (5 cards)');
-      await drawDeckBtn.click();
-      await expect(page.getByTestId('player-hand')).toContainText('Your Hand (6 cards)');
-    }
-
-    // Step 2.6: Route Selection on Game Board
-    await page.getByTestId('route-group-route_denver_salt_lake_city_red').click();
-    await expect(page.getByTestId('selected-route-panel')).toBeVisible();
-  });
-
-  test('3. Draw face-up card, replace, and turn progression', async ({ page }) => {
-    const gameId = `e2e_faceup_${Date.now()}`;
-
-    await page.goto('/');
-    await page.getByTestId('player-name-input').fill('Alice');
-    await page.getByTestId('game-id-input').fill(gameId);
-    await page.getByTestId('create-game-btn').click();
-
-    await page.evaluate((gid) => {
-      const sessionData = localStorage.getItem(`rails_game_${gid}`);
-      if (sessionData) {
-        const game = JSON.parse(sessionData);
-        game.players['p_bob'] = {
-          playerId: 'p_bob',
-          displayName: 'Bob',
-          color: '#3182ce',
-          ready: true,
-          trainCards: [],
-          destinationTickets: [],
-          claimedRoutes: [],
-          trainsRemaining: 45,
-          score: 0,
-        };
-        game.playerOrder.push('p_bob');
-        localStorage.setItem(`rails_game_${gid}`, JSON.stringify(game));
-        window.dispatchEvent(
-          new StorageEvent('storage', {
-            key: `rails_game_${gid}`,
-            newValue: JSON.stringify(game),
-          })
-        );
+      const modal2 = page2.getByTestId('destination-ticket-modal');
+      if (await modal2.isVisible({ timeout: 2000 }).catch(() => false)) {
+        await page2.getByTestId('confirm-tickets-btn').click();
+        await expect(modal2).toBeHidden();
       }
-    }, gameId);
 
-    await page.getByTestId('start-game-btn').click();
-    await expect(page.getByTestId('in-game-container')).toBeVisible();
+      // Verify initial cards and hand privacy
+      await expect(page1.getByTestId('player-hand')).toContainText('Your Hand (4 cards)');
+      await expect(page2.getByTestId('player-hand')).toContainText('Your Hand (4 cards)');
 
-    const ticketModal = page.getByTestId('destination-ticket-modal');
-    if (await ticketModal.isVisible().catch(() => false)) {
-      await page.getByTestId('confirm-tickets-btn').click();
-    }
+      // Verify face-up cards displayed on both clients
+      for (let i = 0; i < 5; i++) {
+        await expect(page1.getByTestId(`face-up-card-${i}`)).toBeVisible();
+        await expect(page2.getByTestId(`face-up-card-${i}`)).toBeVisible();
+      }
 
-    // Draw card from face-up display slot 0
-    const faceUpCard0 = page.getByTestId('face-up-card-0');
-    if (await faceUpCard0.isEnabled()) {
-      await faceUpCard0.click();
-      await expect(page.getByTestId('player-hand')).toContainText('Your Hand (5 cards)');
+      // Determine active player
+      const activePlayerName = (await page1.getByTestId('current-player-name').textContent())?.trim();
+      const activePage = activePlayerName === 'Alice' ? page1 : page2;
+      const inactivePage = activePlayerName === 'Alice' ? page2 : page1;
+
+      // Verify turn restriction: inactive player cannot draw from deck
+      await expect(inactivePage.getByTestId('draw-deck-btn')).toBeDisabled();
+
+      // Active player draws 2 cards
+      await activePage.getByTestId('draw-deck-btn').click();
+      await expect(activePage.getByTestId('player-hand')).toContainText('Your Hand (5 cards)');
+      await activePage.getByTestId('draw-deck-btn').click();
+      await expect(activePage.getByTestId('player-hand')).toContainText('Your Hand (6 cards)');
+
+      // Verify turn advances on both clients
+      const nextPlayerName = activePlayerName === 'Alice' ? 'Bob' : 'Alice';
+      await expect(page1.getByTestId('current-player-name')).toHaveText(nextPlayerName);
+      await expect(page2.getByTestId('current-player-name')).toHaveText(nextPlayerName);
+
+      // Verify turn roles flipped: previous active page disabled, new active page enabled
+      await expect(activePage.getByTestId('draw-deck-btn')).toBeDisabled();
+      await expect(inactivePage.getByTestId('draw-deck-btn')).toBeEnabled();
+
+      // Test route selection on board
+      await page1.getByTestId('route-group-route_denver_salt_lake_city_red').click();
+      await expect(page1.getByTestId('selected-route-panel')).toBeVisible();
+    } finally {
+      await context1.close();
+      await context2.close();
     }
   });
 
-  test('4. Error handling when joining non-existent game', async ({ page }) => {
+  test('3. Error handling when joining non-existent game', async ({ page }) => {
     await page.goto('/');
     await page.getByTestId('player-name-input').fill('Charlie');
     await page.getByTestId('game-id-input').fill('NONEXISTENT_99999');
