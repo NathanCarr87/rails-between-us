@@ -215,7 +215,7 @@ describe('Multiplayer Lobby Real-Time Sync & Error Handling Integration', () => 
     ).rejects.toThrow('already chosen by another player');
   });
 
-  it('rejects starting game with fewer than 2 players or when players are not ready', async () => {
+  it('rejects starting game with fewer than 2 players and allows host to start with 2 players', async () => {
     const gameId = 'NOT_READY_TEST';
     await createGameInFirestore(gameId, {
       playerId: 'p1',
@@ -226,14 +226,15 @@ describe('Multiplayer Lobby Real-Time Sync & Error Handling Integration', () => 
     // 1 player only -> cannot start
     await expect(startGameInFirestore(gameId)).rejects.toThrow('At least 2 players are required');
 
-    // 2 players but not ready -> cannot start
+    // 2 players -> host can start game
     await joinGameInFirestore(gameId, {
       playerId: 'p2',
       displayName: 'Bob',
       color: '#3182ce',
     });
 
-    await expect(startGameInFirestore(gameId)).rejects.toThrow('All players must be ready');
+    const startedGame = await startGameInFirestore(gameId);
+    expect(startedGame.phase).toBe('playing');
   });
 });
 

@@ -377,11 +377,15 @@ export async function startGameInFirestore(gameId: string): Promise<Game> {
           throw new Error('At least 2 players are required to start the game.');
         }
 
-        if (!playerList.every((p) => p.ready)) {
-          throw new Error('All players must be ready to start the game.');
+        const gameWithReadyPlayers = { ...existingGame };
+        for (const pid in gameWithReadyPlayers.players) {
+          gameWithReadyPlayers.players[pid] = {
+            ...gameWithReadyPlayers.players[pid],
+            ready: true,
+          };
         }
 
-        const startedGame = engineStartGame(existingGame);
+        const startedGame = engineStartGame(gameWithReadyPlayers);
         transaction.set(gameRef, startedGame);
         return startedGame;
       });
@@ -398,10 +402,14 @@ export async function startGameInFirestore(gameId: string): Promise<Game> {
     if (playerList.length < 2) {
       throw new Error('At least 2 players are required to start the game.');
     }
-    if (!playerList.every((p) => p.ready)) {
-      throw new Error('All players must be ready to start the game.');
+    const memGameWithReady = { ...memGame };
+    for (const pid in memGameWithReady.players) {
+      memGameWithReady.players[pid] = {
+        ...memGameWithReady.players[pid],
+        ready: true,
+      };
     }
-    updatedGame = engineStartGame(memGame);
+    updatedGame = engineStartGame(memGameWithReady);
   }
 
   inMemoryGames.set(gameId, updatedGame);
