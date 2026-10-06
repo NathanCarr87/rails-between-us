@@ -22,7 +22,7 @@ import {
 } from '../state/gameEngine';
 
 // Firebase configuration using standard env variables for project rails-between-us-2fd0b
-const apiKey = import.meta.env?.VITE_FIREBASE_API_KEY || '';
+const apiKey = import.meta.env?.VITE_FIREBASE_API_KEY || 'demo-api-key';
 const authDomain = import.meta.env?.VITE_FIREBASE_AUTH_DOMAIN || 'rails-between-us-2fd0b.firebaseapp.com';
 const projectId = import.meta.env?.VITE_FIREBASE_PROJECT_ID || 'rails-between-us-2fd0b';
 const storageBucket = import.meta.env?.VITE_FIREBASE_STORAGE_BUCKET || 'rails-between-us-2fd0b.firebasestorage.app';
@@ -77,6 +77,9 @@ function saveLocalGame(gameId: string, game: Game | null): void {
         })
       );
     }
+    if (syncChannel) {
+      syncChannel.postMessage({ type: 'GAME_SYNC', gameId, game });
+    }
   } catch (err) {
     console.warn('Failed to save game to localStorage', err);
   }
@@ -89,6 +92,42 @@ function getLocalGame(gameId: string): Game | null {
     return data ? JSON.parse(data) : null;
   } catch {
     return null;
+  }
+}
+
+let syncChannel: BroadcastChannel | null = null;
+if (typeof window !== 'undefined' && typeof BroadcastChannel !== 'undefined') {
+  try {
+    syncChannel = new BroadcastChannel('rails_game_sync');
+    syncChannel.onmessage = (event) => {
+      if (!event.data) return;
+      const { type, gameId, game } = event.data;
+      if (type === 'GAME_SYNC' && gameId) {
+        if (game) {
+          inMemoryGames.set(gameId, game);
+          try {
+            localStorage.setItem(`rails_game_${gameId}`, JSON.stringify(game));
+          } catch {
+            // ignore
+          }
+        } else {
+          inMemoryGames.delete(gameId);
+          try {
+            localStorage.removeItem(`rails_game_${gameId}`);
+          } catch {
+            // ignore
+          }
+        }
+        notifyMemoryListeners(gameId, game);
+      } else if (type === 'REQUEST_GAME' && gameId) {
+        const existing = inMemoryGames.get(gameId) || getLocalGame(gameId);
+        if (existing && syncChannel) {
+          syncChannel.postMessage({ type: 'GAME_SYNC', gameId, game: existing });
+        }
+      }
+    };
+  } catch {
+    // BroadcastChannel not available
   }
 }
 
@@ -245,7 +284,15 @@ export async function joinGameInFirestore(
       throw err;
     }
   } else {
-    const memGame = inMemoryGames.get(gameId) || getLocalGame(gameId);
+    let memGame = inMemoryGames.get(gameId) || getLocalGame(gameId);
+    if (!memGame && syncChannel) {
+      syncChannel.postMessage({ type: 'REQUEST_GAME', gameId });
+      for (let i = 0; i < 20; i++) {
+        await new Promise((res) => setTimeout(res, 50));
+        memGame = inMemoryGames.get(gameId) || getLocalGame(gameId);
+        if (memGame) break;
+      }
+    }
     if (!memGame) {
       throw new Error(`Game ${gameId} does not exist.`);
     }
@@ -541,6 +588,8 @@ export function subscribeToGame(
   const existingMemGame = inMemoryGames.get(gameId) || getLocalGame(gameId);
   if (existingMemGame) {
     onUpdate(existingMemGame);
+  } else if (syncChannel) {
+    syncChannel.postMessage({ type: 'REQUEST_GAME', gameId });
   }
 
   let firestoreUnsub: Unsubscribe = () => {};

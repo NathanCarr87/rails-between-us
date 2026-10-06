@@ -31,7 +31,7 @@ export const PlayerStatus: React.FC<PlayerStatusProps> = ({
         </div>
         <div style={styles.statusItem}>
           <span style={styles.label}>Current Turn:</span>
-          <span style={styles.currentPlayerName}>
+          <span style={styles.currentPlayerName} data-testid="current-player-name">
             {currentPlayer ? currentPlayer.displayName : 'None'}
           </span>
         </div>
