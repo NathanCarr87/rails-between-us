@@ -1,13 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import type { CardColor, Game } from '../game/model/types';
 import {
-  advanceTurn,
-  claimRoute,
-  drawTrainCards,
-} from '../game/state/gameEngine';
-import {
   clearPlayerSession,
   createGameInFirestore,
+  executeTurnActionInFirestore,
   getPlayerSession,
   joinGameInFirestore,
   savePlayerSession,
@@ -18,6 +14,7 @@ import {
 } from '../game/services/firebase';
 import { GameBoard } from './GameBoard';
 import { PlayerStatus } from './PlayerStatus';
+import { PlayerHand } from './PlayerHand';
 import { Lobby } from './Lobby';
 
 export const DevGameView: React.FC = () => {
@@ -140,17 +137,19 @@ export const DevGameView: React.FC = () => {
     setErrorMessage(null);
   };
 
-  const handleAdvanceTurn = () => {
-    if (!game) return;
+  const handleDrawCards = async (playerId: string) => {
+    if (!game || !activeGameId) return;
     setErrorMessage(null);
-    setGame(advanceTurn(game));
-  };
 
-  const handleDrawCards = (playerId: string) => {
-    if (!game) return;
-    setErrorMessage(null);
+    if (game.currentPlayerId !== localPlayerId) {
+      setErrorMessage("It is not your turn!");
+      return;
+    }
+
     try {
-      const updatedGame = drawTrainCards(game, playerId, 2);
+      const updatedGame = await executeTurnActionInFirestore(activeGameId, playerId, {
+        type: 'DRAW_TRAIN_CARDS',
+      });
       setGame(updatedGame);
     } catch (err: unknown) {
       if (err instanceof Error) {
@@ -159,8 +158,8 @@ export const DevGameView: React.FC = () => {
     }
   };
 
-  const handleClaimRoute = (routeIdToClaim?: string) => {
-    if (!game) return;
+  const handleClaimRoute = async (routeIdToClaim?: string) => {
+    if (!game || !activeGameId) return;
     setErrorMessage(null);
     const targetRouteId = routeIdToClaim || selectedRouteId;
 
@@ -168,6 +167,12 @@ export const DevGameView: React.FC = () => {
       setErrorMessage('No active player. Please start game first.');
       return;
     }
+
+    if (game.currentPlayerId !== localPlayerId) {
+      setErrorMessage('It is not your turn!');
+      return;
+    }
+
     if (!targetRouteId) {
       setErrorMessage('Select a route to claim.');
       return;
@@ -184,15 +189,15 @@ export const DevGameView: React.FC = () => {
       return;
     }
 
-    const currentPlayer = game.players[game.currentPlayerId];
-    if (!currentPlayer) {
-      setErrorMessage('Current player not found.');
+    const localPlayer = game.players[localPlayerId];
+    if (!localPlayer) {
+      setErrorMessage('Local player not found.');
       return;
     }
 
-    if (currentPlayer.trainsRemaining < route.length) {
+    if (localPlayer.trainsRemaining < route.length) {
       setErrorMessage(
-        `Player has only ${currentPlayer.trainsRemaining} trains left but route requires ${route.length}.`
+        `Player has only ${localPlayer.trainsRemaining} trains left but route requires ${route.length}.`
       );
       return;
     }
@@ -202,9 +207,9 @@ export const DevGameView: React.FC = () => {
       requiredColor = route.colorRequirement;
     } else {
       const colorCounts: Record<string, number> = {};
-      const locoCount = currentPlayer.trainCards.filter((c) => c.color === 'locomotive').length;
+      const locoCount = localPlayer.trainCards.filter((c) => c.color === 'locomotive').length;
 
-      currentPlayer.trainCards.forEach((c) => {
+      localPlayer.trainCards.forEach((c) => {
         if (c.color !== 'locomotive') {
           colorCounts[c.color] = (colorCounts[c.color] || 0) + 1;
         }
@@ -226,7 +231,7 @@ export const DevGameView: React.FC = () => {
       }
     }
 
-    const matchingCards = currentPlayer.trainCards.filter(
+    const matchingCards = localPlayer.trainCards.filter(
       (c) => c.color === requiredColor || c.color === 'locomotive'
     );
 
@@ -240,7 +245,11 @@ export const DevGameView: React.FC = () => {
     const cardsToUse = matchingCards.slice(0, route.length);
 
     try {
-      const updatedGame = claimRoute(game, game.currentPlayerId, targetRouteId, cardsToUse);
+      const updatedGame = await executeTurnActionInFirestore(activeGameId, localPlayerId, {
+        type: 'CLAIM_ROUTE',
+        routeId: targetRouteId,
+        cardsToUse,
+      });
       setGame(updatedGame);
       setSelectedRouteId('');
     } catch (err: unknown) {
@@ -268,6 +277,8 @@ export const DevGameView: React.FC = () => {
   }
 
   const currentPlayer = game.currentPlayerId ? game.players[game.currentPlayerId] : null;
+  const localPlayer = localPlayerId ? game.players[localPlayerId] : null;
+  const isLocalTurn = game.currentPlayerId === localPlayerId;
 
   return (
     <div style={styles.container} data-testid="in-game-container">
@@ -286,7 +297,17 @@ export const DevGameView: React.FC = () => {
       )}
 
       {/* Status Area */}
-      <PlayerStatus game={game} onDrawCards={handleDrawCards} />
+      <PlayerStatus game={game} localPlayerId={localPlayerId} onDrawCards={handleDrawCards} />
+
+      {/* Local Player Hand */}
+      {localPlayer && (
+        <PlayerHand
+          cards={localPlayer.trainCards}
+          isCurrentTurn={isLocalTurn}
+          selectedColor={selectedCardColor}
+          onSelectColor={setSelectedCardColor}
+        />
+      )}
 
       {/* Main Game Board */}
       <section style={styles.boardCard}>
@@ -306,22 +327,16 @@ export const DevGameView: React.FC = () => {
       <div style={styles.controlGrid}>
         {/* Controls / Turn Info */}
         <section style={styles.card}>
-          <h3>Game Controls</h3>
+          <h3>Game Status</h3>
           <p style={styles.mutedText}>
             Active Player:{' '}
             <strong>{currentPlayer ? currentPlayer.displayName : 'None'}</strong>
+            {isLocalTurn ? ' (It is your turn!)' : ' (Waiting for player...)'}
           </p>
 
           <div style={styles.btnRow}>
-            <button
-              style={styles.btnPrimary}
-              onClick={handleAdvanceTurn}
-              disabled={game.playerOrder.length === 0}
-            >
-              Advance Turn
-            </button>
             <button style={styles.btnDanger} onClick={handleLeaveGame}>
-              Return to Lobby
+              Leave Game / Return to Lobby
             </button>
           </div>
         </section>

@@ -12,6 +12,12 @@ import {
   MAX_PLAYERS,
   startGame,
 } from '../state/gameEngine';
+import {
+  createGameInFirestore,
+  executeTurnActionInFirestore,
+  joinGameInFirestore,
+  startGameInFirestore,
+} from '../services/firebase';
 import type { TrainCard } from '../model/types';
 
 describe('Game Domain Model & Rules', () => {
@@ -274,6 +280,32 @@ describe('Game Domain Model & Rules', () => {
           cardsToUse: [{ id: 'c1', color: 'red' }, { id: 'c2', color: 'red' }],
         });
       }).toThrow(/Not this player turn/);
+    });
+
+    it('executes turn actions via executeTurnActionInFirestore service correctly', async () => {
+      const gameId = 'test_fs_turn_1';
+      await createGameInFirestore(gameId, { playerId: 'p1', displayName: 'Alice', color: '#e53e3e' });
+      await joinGameInFirestore(gameId, { playerId: 'p2', displayName: 'Bob', color: '#3182ce' });
+      let game = await startGameInFirestore(gameId);
+
+      expect(game.currentPlayerId).toBe('p1');
+      expect(game.players.p1.trainCards.length).toBe(0);
+
+      // p1 draws cards
+      game = await executeTurnActionInFirestore(gameId, 'p1', { type: 'DRAW_TRAIN_CARDS' });
+
+      expect(game.players.p1.trainCards.length).toBe(2);
+      expect(game.currentPlayerId).toBe('p2');
+
+      // Attempt by p1 out of turn fails
+      await expect(
+        executeTurnActionInFirestore(gameId, 'p1', { type: 'DRAW_TRAIN_CARDS' })
+      ).rejects.toThrow(/not player p1's turn/i);
+
+      // p2 draws cards
+      game = await executeTurnActionInFirestore(gameId, 'p2', { type: 'DRAW_TRAIN_CARDS' });
+      expect(game.players.p2.trainCards.length).toBe(2);
+      expect(game.currentPlayerId).toBe('p1');
     });
   });
 

@@ -3,11 +3,13 @@ import type { Game } from '../game/model/types';
 
 export interface PlayerStatusProps {
   game: Game;
+  localPlayerId?: string;
   onDrawCards?: (playerId: string) => void;
 }
 
-export const PlayerStatus: React.FC<PlayerStatusProps> = ({ game, onDrawCards }) => {
+export const PlayerStatus: React.FC<PlayerStatusProps> = ({ game, localPlayerId, onDrawCards }) => {
   const currentPlayer = game.currentPlayerId ? game.players[game.currentPlayerId] : null;
+  const isLocalTurn = localPlayerId && localPlayerId === game.currentPlayerId;
 
   return (
     <div style={styles.container}>
@@ -61,14 +63,18 @@ export const PlayerStatus: React.FC<PlayerStatusProps> = ({ game, onDrawCards })
                 <div>Routes: <strong>{player.claimedRoutes.length}</strong></div>
               </div>
 
-              {onDrawCards && (
+              {onDrawCards && pid === localPlayerId && (
                 <div style={styles.actions}>
                   <button
-                    style={styles.btnDraw}
+                    style={{
+                      ...styles.btnDraw,
+                      opacity: isCurrent && isLocalTurn ? 1 : 0.5,
+                      cursor: isCurrent && isLocalTurn ? 'pointer' : 'not-allowed',
+                    }}
                     onClick={() => onDrawCards(pid)}
-                    disabled={game.trainCardDeck.length + game.trainCardDiscardPile.length === 0}
+                    disabled={!isCurrent || !isLocalTurn || game.trainCardDeck.length + game.trainCardDiscardPile.length === 0}
                   >
-                    Draw 2 Cards
+                    {isLocalTurn ? 'Draw 2 Cards' : 'Not Your Turn'}
                   </button>
                 </div>
               )}
