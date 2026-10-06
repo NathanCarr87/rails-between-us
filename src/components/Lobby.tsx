@@ -156,13 +156,14 @@ export const Lobby: React.FC<LobbyProps> = ({
 
   const playersList = Object.values(game.players);
   const localPlayer = game.players[localPlayerId];
+  const isHost = game.playerOrder[0] === localPlayerId;
   const takenColors = new Set(
     playersList
       .filter((p) => p.playerId !== localPlayerId)
       .map((p) => p.color.toLowerCase())
   );
 
-  const allReady = playersList.length >= 2 && playersList.every((p) => p.ready);
+  const canStart = isHost && playersList.length >= 2;
 
   return (
     <div style={styles.container} data-testid="lobby-active-container">
@@ -266,19 +267,25 @@ export const Lobby: React.FC<LobbyProps> = ({
         </div>
 
         <div style={{ marginTop: '20px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-          <button
-            type="button"
-            onClick={onStartGame}
-            disabled={!allReady}
-            style={{
-              ...styles.btnPrimary,
-              opacity: allReady ? 1 : 0.5,
-              cursor: allReady ? 'pointer' : 'not-allowed',
-            }}
-            data-testid="start-game-btn"
-          >
-            Start Game
-          </button>
+          {isHost ? (
+            <button
+              type="button"
+              onClick={onStartGame}
+              disabled={!canStart}
+              style={{
+                ...styles.btnPrimary,
+                opacity: canStart ? 1 : 0.5,
+                cursor: canStart ? 'pointer' : 'not-allowed',
+              }}
+              data-testid="start-game-btn"
+            >
+              Start Game
+            </button>
+          ) : (
+            <p style={styles.mutedTextSmall} data-testid="waiting-for-host-msg">
+              Waiting for host ({game.players[game.playerOrder[0]]?.displayName || 'Host'}) to start the game...
+            </p>
+          )}
           {onLeaveGame && (
             <button
               type="button"
@@ -289,9 +296,9 @@ export const Lobby: React.FC<LobbyProps> = ({
               Leave Lobby
             </button>
           )}
-          {!allReady && (
+          {isHost && !canStart && (
             <p style={styles.mutedTextSmall}>
-              Requires at least 2 players and all players marked as READY to start.
+              Requires at least 2 players to start the game.
             </p>
           )}
         </div>
