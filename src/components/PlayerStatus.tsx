@@ -18,12 +18,12 @@ export const PlayerStatus: React.FC<PlayerStatusProps> = ({
   const isLocalTurn = localPlayerId && localPlayerId === game.currentPlayerId;
 
   return (
-    <div style={styles.container}>
+    <div style={styles.container} data-testid="player-status-container">
       {/* Game Header Status Bar */}
       <div style={styles.headerBar}>
         <div style={styles.statusItem}>
           <span style={styles.label}>Game Status:</span>
-          <span style={styles.badge}>{game.status}</span>
+          <span style={styles.badge} data-testid="game-status-badge">{game.status}</span>
         </div>
         <div style={styles.statusItem}>
           <span style={styles.label}>Turn:</span>
@@ -31,7 +31,7 @@ export const PlayerStatus: React.FC<PlayerStatusProps> = ({
         </div>
         <div style={styles.statusItem}>
           <span style={styles.label}>Current Turn:</span>
-          <span style={styles.currentPlayerName}>
+          <span style={styles.currentPlayerName} data-testid="current-player-name">
             {currentPlayer ? currentPlayer.displayName : 'None'}
           </span>
         </div>
