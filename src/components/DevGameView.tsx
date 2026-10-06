@@ -18,6 +18,7 @@ import { PlayerStatus } from './PlayerStatus';
 import { PlayerHand } from './PlayerHand';
 import { Lobby } from './Lobby';
 import { DestinationTicketModal } from './DestinationTicketModal';
+import { FaceUpCards } from './FaceUpCards';
 
 export const DevGameView: React.FC = () => {
   const [activeGameId, setActiveGameId] = useState<string>(() => {
@@ -137,6 +138,51 @@ export const DevGameView: React.FC = () => {
     setLocalPlayerId('');
     setSelectedRouteId('');
     setErrorMessage(null);
+  };
+
+  const handleDrawFaceUpCard = async (index: number) => {
+    if (!game || !activeGameId || !localPlayerId) return;
+    setErrorMessage(null);
+
+    if (game.currentPlayerId !== localPlayerId) {
+      setErrorMessage('It is not your turn!');
+      return;
+    }
+
+    try {
+      const updatedGame = await executeTurnActionInFirestore(activeGameId, localPlayerId, {
+        type: 'DRAW_TRAIN_CARD',
+        source: 'faceUp',
+        index,
+      });
+      setGame(updatedGame);
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        setErrorMessage(err.message);
+      }
+    }
+  };
+
+  const handleDrawDeckCard = async () => {
+    if (!game || !activeGameId || !localPlayerId) return;
+    setErrorMessage(null);
+
+    if (game.currentPlayerId !== localPlayerId) {
+      setErrorMessage('It is not your turn!');
+      return;
+    }
+
+    try {
+      const updatedGame = await executeTurnActionInFirestore(activeGameId, localPlayerId, {
+        type: 'DRAW_TRAIN_CARD',
+        source: 'deck',
+      });
+      setGame(updatedGame);
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        setErrorMessage(err.message);
+      }
+    }
   };
 
   const handleDrawCards = async (playerId: string) => {
@@ -353,6 +399,17 @@ export const DevGameView: React.FC = () => {
         localPlayerId={localPlayerId}
         onDrawCards={handleDrawCards}
         onDrawDestinationTickets={handleDrawDestinationTickets}
+      />
+
+      {/* Prominent 5 Face-Up Cards and Deck Display */}
+      <FaceUpCards
+        faceUpCards={game.faceUpTrainCards || []}
+        deckCount={game.trainCardDeck.length}
+        discardCount={game.trainCardDiscardPile.length}
+        cardsDrawnThisTurn={game.cardsDrawnThisTurn || 0}
+        isCurrentTurn={isLocalTurn}
+        onDrawFaceUpCard={handleDrawFaceUpCard}
+        onDrawDeckCard={handleDrawDeckCard}
       />
 
       {/* Local Player Hand */}

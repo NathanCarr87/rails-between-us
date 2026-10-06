@@ -68,18 +68,28 @@ export interface Game {
   turnNumber: number;
   boardState: BoardState;
   trainCardDeck: TrainCard[];
+  faceUpTrainCards: TrainCard[];
   trainCardDiscardPile: TrainCard[];
   destinationTicketDeck: DestinationTicket[];
   destinationTicketDiscardPile: DestinationTicket[];
+  cardsDrawnThisTurn?: number;
   isFinalRound?: boolean;
   finalRoundTriggeredBy?: string | null;
   createdAt: number;
   updatedAt: number;
 }
 
+export interface DrawTrainCardAction {
+  type: 'DRAW_TRAIN_CARD';
+  source: 'deck' | 'faceUp';
+  index?: number;
+}
+
 export interface DrawTrainCardsAction {
   type: 'DRAW_TRAIN_CARDS';
   count?: number;
+  source?: 'deck' | 'faceUp';
+  index?: number;
 }
 
 export interface ClaimRouteAction {
@@ -100,6 +110,7 @@ export interface SelectDestinationTicketsAction {
 }
 
 export type PlayerAction =
+  | DrawTrainCardAction
   | DrawTrainCardsAction
   | ClaimRouteAction
   | DrawDestinationTicketsAction
