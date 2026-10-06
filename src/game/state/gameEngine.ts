@@ -23,6 +23,51 @@ export const PLAYER_COLORS = [
   '#edf2f7', // White / Silver
 ];
 
+export function checkAndRefreshFaceUpLocomotives(game: Game): Game {
+  let faceUp = [...game.faceUpTrainCards];
+  let deck = [...game.trainCardDeck];
+  let discard = [...game.trainCardDiscardPile];
+
+  let locoCount = faceUp.filter((c) => c.color === 'locomotive').length;
+
+  while (locoCount >= 3) {
+    const totalAvailableCards = faceUp.length + deck.length + discard.length;
+    if (totalAvailableCards < 5) {
+      break;
+    }
+
+    discard = [...discard, ...faceUp];
+    faceUp = [];
+
+    if (deck.length < 5 && discard.length > 0) {
+      deck = [...deck, ...shuffleDeck(discard)];
+      discard = [];
+    }
+
+    while (faceUp.length < 5 && (deck.length > 0 || discard.length > 0)) {
+      if (deck.length === 0 && discard.length > 0) {
+        deck = shuffleDeck(discard);
+        discard = [];
+      }
+      const card = deck.pop();
+      if (card) faceUp.push(card);
+    }
+
+    const newLocoCount = faceUp.filter((c) => c.color === 'locomotive').length;
+    if (newLocoCount >= 3 && deck.length === 0 && discard.length === 0) {
+      break;
+    }
+    locoCount = newLocoCount;
+  }
+
+  return {
+    ...game,
+    faceUpTrainCards: faceUp,
+    trainCardDeck: deck,
+    trainCardDiscardPile: discard,
+  };
+}
+
 export function createGame(gameId: string = 'game_' + Date.now()): Game {
   const now = Date.now();
   return {
@@ -35,9 +80,11 @@ export function createGame(gameId: string = 'game_' + Date.now()): Game {
     turnNumber: 0,
     boardState: createInitialBoard(),
     trainCardDeck: createSampleTrainDeck(),
+    faceUpTrainCards: [],
     trainCardDiscardPile: [],
     destinationTicketDeck: createSampleDestinationDeck(),
     destinationTicketDiscardPile: [],
+    cardsDrawnThisTurn: 0,
     isFinalRound: false,
     finalRoundTriggeredBy: null,
     createdAt: now,
@@ -174,7 +221,15 @@ export function startGame(game: Game): Game {
     };
   }
 
-  return {
+  let faceUpCards = [...game.faceUpTrainCards];
+  if (faceUpCards.length === 0) {
+    for (let i = 0; i < 5; i++) {
+      const card = currentTrainDeck.pop();
+      if (card) faceUpCards.push(card);
+    }
+  }
+
+  let startedGame: Game = {
     ...game,
     phase: 'playing',
     status: 'active',
@@ -182,13 +237,17 @@ export function startGame(game: Game): Game {
     turnNumber,
     players: updatedPlayers,
     trainCardDeck: currentTrainDeck,
+    faceUpTrainCards: faceUpCards,
     destinationTicketDeck: currentTicketDeck,
+    cardsDrawnThisTurn: 0,
     updatedAt: Date.now(),
   };
+
+  return checkAndRefreshFaceUpLocomotives(startedGame);
 }
 
 export function advanceTurn(game: Game): Game {
-  if (game.status === 'completed' || game.playerOrder.length === 0) {
+  if (game.phase !== 'playing' || game.status === 'completed' || game.playerOrder.length === 0) {
     return game;
   }
 
@@ -238,6 +297,7 @@ export function advanceTurn(game: Game): Game {
     ...game,
     currentPlayerId: nextPlayerId,
     turnNumber: game.turnNumber + 1,
+    cardsDrawnThisTurn: 0,
     isFinalRound,
     finalRoundTriggeredBy,
     updatedAt: Date.now(),
@@ -388,47 +448,125 @@ export function discardTrainCards(
   };
 }
 
-export function drawTrainCards(game: Game, playerId: string, count: number = 2): Game {
+export function drawSingleTrainCard(
+  game: Game,
+  playerId: string,
+  source: 'deck' | 'faceUp',
+  faceUpIndex?: number
+): Game {
   const player = game.players[playerId];
   if (!player) {
     throw new Error(`Player ${playerId} does not exist.`);
   }
 
+  if (game.currentPlayerId !== null && game.currentPlayerId !== playerId) {
+    throw new Error(`Cannot draw train cards: Not player ${playerId}'s turn.`);
+  }
+
+  const cardsDrawn = game.cardsDrawnThisTurn || 0;
+  if (cardsDrawn >= 2) {
+    throw new Error(`Player ${playerId} has already drawn 2 cards this turn.`);
+  }
+
   let deck = [...game.trainCardDeck];
   let discard = [...game.trainCardDiscardPile];
+  let faceUp = [...game.faceUpTrainCards];
 
-  const drawn: TrainCard[] = [];
-
-  for (let i = 0; i < count; i++) {
+  function popFromDeck(): TrainCard | null {
     if (deck.length === 0) {
       if (discard.length === 0) {
-        break; // No cards left to draw
+        return null;
       }
-      // Reshuffle discard into deck
       deck = shuffleDeck(discard);
       discard = [];
     }
-    const card = deck.pop();
-    if (card) {
-      drawn.push(card);
+    return deck.pop() ?? null;
+  }
+
+  let drawnCard: TrainCard | null = null;
+
+  if (source === 'faceUp') {
+    if (faceUpIndex === undefined || faceUpIndex < 0 || faceUpIndex >= faceUp.length) {
+      throw new Error(`Invalid face-up card index: ${faceUpIndex}`);
+    }
+
+    const targetCard = faceUp[faceUpIndex];
+    if (!targetCard) {
+      throw new Error(`No card found at face-up index ${faceUpIndex}`);
+    }
+
+    if (cardsDrawn === 1 && targetCard.color === 'locomotive') {
+      throw new Error('Cannot take a face-up Locomotive as your second card.');
+    }
+
+    drawnCard = targetCard;
+
+    const replacementCard = popFromDeck();
+    if (replacementCard) {
+      faceUp[faceUpIndex] = replacementCard;
+    } else {
+      faceUp.splice(faceUpIndex, 1);
+    }
+  } else {
+    drawnCard = popFromDeck();
+    if (!drawnCard) {
+      throw new Error('No train cards remaining in deck or discard pile.');
     }
   }
 
   const updatedPlayer: Player = {
     ...player,
-    trainCards: [...player.trainCards, ...drawn],
+    trainCards: [...player.trainCards, drawnCard],
   };
 
-  return {
+  const newCardsDrawn = cardsDrawn + 1;
+  const isFaceUpLocomotive = source === 'faceUp' && drawnCard.color === 'locomotive';
+
+  const updatedGame: Game = {
     ...game,
     players: {
       ...game.players,
       [playerId]: updatedPlayer,
     },
     trainCardDeck: deck,
+    faceUpTrainCards: faceUp,
     trainCardDiscardPile: discard,
+    cardsDrawnThisTurn: newCardsDrawn,
     updatedAt: Date.now(),
   };
+
+  const refreshedGame = checkAndRefreshFaceUpLocomotives(updatedGame);
+
+  const totalRemainingInDraws =
+    refreshedGame.trainCardDeck.length +
+    refreshedGame.trainCardDiscardPile.length +
+    refreshedGame.faceUpTrainCards.length;
+
+  if (isFaceUpLocomotive || newCardsDrawn >= 2 || totalRemainingInDraws === 0) {
+    const gameWithResetDrawCount = {
+      ...refreshedGame,
+      cardsDrawnThisTurn: 0,
+    };
+    return advanceTurn(gameWithResetDrawCount);
+  }
+
+  return refreshedGame;
+}
+
+export function drawTrainCards(game: Game, playerId: string, count: number = 2): Game {
+  let updatedGame = game;
+  for (let i = 0; i < count; i++) {
+    const cardsDrawnSoFar = updatedGame.cardsDrawnThisTurn || 0;
+    if (cardsDrawnSoFar >= 2) break;
+    if (updatedGame.currentPlayerId !== null && updatedGame.currentPlayerId !== playerId) break;
+
+    try {
+      updatedGame = drawSingleTrainCard(updatedGame, playerId, 'deck');
+    } catch {
+      break;
+    }
+  }
+  return updatedGame;
 }
 
 export interface DrawDestinationTicketsResult {
@@ -644,12 +782,11 @@ export function executeDrawTrainCardsTurn(
   playerId: string,
   count: number = 2
 ): Game {
-  if (game.currentPlayerId !== playerId) {
+  if (game.currentPlayerId !== null && game.currentPlayerId !== playerId) {
     throw new Error(`Cannot draw train cards: Not player ${playerId}'s turn.`);
   }
 
-  const gameWithDrawnCards = drawTrainCards(game, playerId, count);
-  return advanceTurn(gameWithDrawnCards);
+  return drawTrainCards(game, playerId, count);
 }
 
 export function executeClaimRouteTurn(
@@ -704,8 +841,14 @@ export function executeDrawDestinationTicketsTurn(
 
 export function executeTurnAction(game: Game, playerId: string, action: PlayerAction): Game {
   switch (action.type) {
-    case 'DRAW_TRAIN_CARDS':
+    case 'DRAW_TRAIN_CARD':
+      return drawSingleTrainCard(game, playerId, action.source, action.index);
+    case 'DRAW_TRAIN_CARDS': {
+      if (action.source) {
+        return drawSingleTrainCard(game, playerId, action.source, action.index);
+      }
       return executeDrawTrainCardsTurn(game, playerId, action.count ?? 2);
+    }
     case 'CLAIM_ROUTE':
       return executeClaimRouteTurn(game, playerId, action.routeId, action.cardsToUse);
     case 'DRAW_DESTINATION_TICKETS':
