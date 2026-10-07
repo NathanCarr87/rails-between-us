@@ -193,4 +193,92 @@ test.describe('Rails Between Us - E2E Multiplayer Gameplay Suite', () => {
       await page2.close();
     }
   });
+
+  test('5. Final Round & Finished Game Scoreboard - Trigger final round, complete final turns, and verify final scores on both clients', async ({ context }) => {
+    const gameId = `e2e_final_round_${Date.now()}`;
+
+    const page1 = await context.newPage();
+    const page2 = await context.newPage();
+
+    try {
+      // Client 1 (Alice) creates game
+      await page1.goto('/');
+      await page1.getByTestId('player-name-input').fill('Alice');
+      await page1.getByTestId('game-id-input').fill(gameId);
+      await page1.getByTestId('color-swatch-#e53e3e').click();
+      await page1.getByTestId('create-game-btn').click();
+
+      // Client 2 (Bob) joins game
+      await page2.goto('/');
+      await expect(page2.getByTestId('lobby-active-container')).toBeVisible();
+      await page2.getByTestId('leave-lobby-btn').click();
+      await page2.getByTestId('player-name-input').fill('Bob');
+      await page2.getByTestId('game-id-input').fill(gameId);
+      await page2.getByTestId('color-swatch-#3182ce').click();
+      await page2.getByTestId('join-game-btn').click();
+
+      // Start game
+      await page1.getByTestId('start-game-btn').click();
+      await expect(page1.getByTestId('in-game-container')).toBeVisible();
+      await expect(page2.getByTestId('in-game-container')).toBeVisible();
+
+      // Both players confirm initial tickets
+      await page1.getByTestId('confirm-tickets-btn').click();
+      await page2.getByTestId('confirm-tickets-btn').click();
+
+      // Determine starting active player
+      const activePlayerName = (await page1.getByTestId('current-player-name').textContent())?.trim();
+      const p1IsActive = activePlayerName === 'Alice';
+      const activePage = p1IsActive ? page1 : page2;
+      const inactivePage = p1IsActive ? page2 : page1;
+
+      // Simulate active player having 2 remaining trains in game state to trigger final round
+      await activePage.evaluate((gid) => {
+        const key = `rails_game_${gid}`;
+        const data = localStorage.getItem(key);
+        if (data) {
+          const game = JSON.parse(data);
+          const activePid = game.currentPlayerId;
+          if (activePid && game.players[activePid]) {
+            game.players[activePid].trainsRemaining = 2;
+            localStorage.setItem(key, JSON.stringify(game));
+            window.dispatchEvent(new StorageEvent('storage', { key, newValue: JSON.stringify(game) }));
+          }
+        }
+      }, gameId);
+
+      // Active player takes their turn (draws 2 cards), which triggers final round
+      await activePage.getByTestId('draw-deck-btn').click();
+      await activePage.getByTestId('draw-deck-btn').click();
+
+      // Verify final round banner is displayed on BOTH clients
+      await expect(page1.getByTestId('final-round-banner')).toBeVisible();
+      await expect(page2.getByTestId('final-round-banner')).toBeVisible();
+
+      // Inactive player takes their final turn
+      await inactivePage.getByTestId('draw-deck-btn').click();
+      await inactivePage.getByTestId('draw-deck-btn').click();
+
+      // Active player takes their final turn to complete the final round
+      await activePage.getByTestId('draw-deck-btn').click();
+      await activePage.getByTestId('draw-deck-btn').click();
+
+      // Game is now finished. Verify finished scoreboard appears on BOTH clients
+      await expect(page1.getByTestId('finished-game-scoreboard')).toBeVisible();
+      await expect(page2.getByTestId('finished-game-scoreboard')).toBeVisible();
+
+      // Verify both clients agree on winner announcement and final score values
+      await expect(page1.getByTestId('scoreboard-title')).toContainText('Game Over - Final Results');
+      await expect(page2.getByTestId('scoreboard-title')).toContainText('Game Over - Final Results');
+
+      const page1Score = await page1.locator('[data-testid^="final-score-"]').first().textContent();
+      const page2Score = await page2.locator('[data-testid^="final-score-"]').first().textContent();
+
+      expect(page1Score).toBeTruthy();
+      expect(page1Score).toBe(page2Score);
+    } finally {
+      await page1.close();
+      await page2.close();
+    }
+  });
 });

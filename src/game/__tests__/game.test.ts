@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   addPlayer,
   advanceTurn,
+  calculateLongestContinuousPath,
+  calculateLongestPathBonuses,
   calculatePlayerScore,
   calculateRouteCost,
   canClaimRoute,
@@ -10,6 +12,7 @@ import {
   createGame,
   drawTrainCards,
   executeTurnAction,
+  isTicketCompleted,
   MAX_PLAYERS,
   startGame,
 } from '../state/gameEngine';
@@ -369,14 +372,14 @@ describe('Game Domain Model & Rules', () => {
       expect(game.currentPlayerId).toBe('p2'); // Turn moves to p2
     });
 
-    it('allows every other player exactly one final turn before marking game completed', () => {
+    it('allows every player including triggerer exactly one final turn before marking game completed', () => {
       let game = createGame();
       game = addPlayer(game, { playerId: 'p1', displayName: 'Alice', color: '#e53e3e' });
       game = addPlayer(game, { playerId: 'p2', displayName: 'Bob', color: '#3182ce' });
       game = addPlayer(game, { playerId: 'p3', displayName: 'Charlie', color: '#38a169' });
       game = startAndConfirmGame(game);
 
-      // p1 triggers final round
+      // p1 triggers final round at end of turn
       game.players.p1.trainsRemaining = 1;
       game = executeTurnAction(game, 'p1', { type: 'DRAW_TRAIN_CARDS' });
 
@@ -384,27 +387,58 @@ describe('Game Domain Model & Rules', () => {
       expect(game.finalRoundTriggeredBy).toBe('p1');
       expect(game.currentPlayerId).toBe('p2');
 
-      // p2 takes their final turn
+      // p2 takes final turn
       game = executeTurnAction(game, 'p2', { type: 'DRAW_TRAIN_CARDS' });
       expect(game.status).toBe('active');
       expect(game.currentPlayerId).toBe('p3');
 
-      // p3 takes their final turn
+      // p3 takes final turn
       game = executeTurnAction(game, 'p3', { type: 'DRAW_TRAIN_CARDS' });
+      expect(game.status).toBe('active');
+      expect(game.currentPlayerId).toBe('p1');
 
-      // Now all other players have taken their final turn and it wraps back to p1
+      // p1 takes their final turn
+      game = executeTurnAction(game, 'p1', { type: 'DRAW_TRAIN_CARDS' });
+
+      // All players (p2, p3, p1) have completed 1 turn in final round
       expect(game.status).toBe('completed');
+      expect(game.phase).toBe('finished');
       expect(game.currentPlayerId).toBeNull();
     });
 
-    it('calculates final scores including destination tickets when game finishes', () => {
+    it('rejects gameplay actions after game ends', () => {
       let game = createGame();
       game = addPlayer(game, { playerId: 'p1', displayName: 'Alice', color: '#e53e3e' });
       game = addPlayer(game, { playerId: 'p2', displayName: 'Bob', color: '#3182ce' });
       game = startAndConfirmGame(game);
 
-      // Setup p1 destination tickets and claimed routes
-      // Ticket 1: Boston -> Washington (8 pts) - COMPLETED
+      // p1 triggers final round
+      game.players.p1.trainsRemaining = 0;
+      game = executeTurnAction(game, 'p1', { type: 'DRAW_TRAIN_CARDS' }); // p2's turn
+      game = executeTurnAction(game, 'p2', { type: 'DRAW_TRAIN_CARDS' }); // p1's final turn
+      game = executeTurnAction(game, 'p1', { type: 'DRAW_TRAIN_CARDS' }); // game finishes
+
+      expect(game.phase).toBe('finished');
+      expect(game.status).toBe('completed');
+
+      // Any further turn action should throw error
+      expect(() => {
+        executeTurnAction(game, 'p1', { type: 'DRAW_TRAIN_CARDS' });
+      }).toThrow(/Game is finished/);
+
+      expect(() => {
+        executeTurnAction(game, 'p2', { type: 'DRAW_TRAIN_CARDS' });
+      }).toThrow(/Game is finished/);
+    });
+
+    it('calculates final scores including destination tickets, connected paths, and longest path bonus', () => {
+      let game = createGame();
+      game = addPlayer(game, { playerId: 'p1', displayName: 'Alice', color: '#e53e3e' });
+      game = addPlayer(game, { playerId: 'p2', displayName: 'Bob', color: '#3182ce' });
+      game = startAndConfirmGame(game);
+
+      // Setup p1 destination tickets and claimed routes:
+      // Ticket 1: Boston -> Washington (8 pts) - COMPLETED via Boston -> New York -> Washington
       // Ticket 2: Boston -> Miami (12 pts) - INCOMPLETE (-12 pts)
       game.players.p1.destinationTickets = [
         { id: 't1', cityA: 'boston', cityB: 'washington', points: 8 },
@@ -414,42 +448,114 @@ describe('Game Domain Model & Rules', () => {
       // Route 1: Boston -> New York (length 2, 2 pts)
       // Route 2: New York -> Washington (length 2, 2 pts)
       game.players.p1.claimedRoutes = ['route_boston_new_york_red', 'route_new_york_washington_orange'];
-      game.players.p1.score = 4; // 2 + 2 from route claims during game
       game.boardState.routes['route_boston_new_york_red'].ownerPlayerId = 'p1';
       game.boardState.routes['route_new_york_washington_orange'].ownerPlayerId = 'p1';
 
-      // Setup p2 destination tickets: Completed ticket (7 pts)
+      // Verify connected path ticket completion
+      expect(
+        isTicketCompleted(
+          game.players.p1.destinationTickets[0],
+          game.players.p1.claimedRoutes,
+          game.boardState.routes
+        )
+      ).toBe(true);
+
+      // Setup p2 destination tickets & routes:
+      // Ticket 3: Atlanta -> Charleston (2 pts) - COMPLETED
       game.players.p2.destinationTickets = [
         { id: 't3', cityA: 'atlanta', cityB: 'charleston', points: 2 },
       ];
-      game.players.p2.claimedRoutes = ['route_atlanta_charleston_any']; // length 2 (2 pts)
-      game.players.p2.score = 2;
+      // p2 claims Atlanta -> Charleston (length 2) & Charleston -> Miami (length 4) -> Total path length = 6
+      game.players.p2.claimedRoutes = ['route_atlanta_charleston_any', 'route_charleston_miami_purple'];
       game.boardState.routes['route_atlanta_charleston_any'].ownerPlayerId = 'p2';
+      game.boardState.routes['route_charleston_miami_purple'].ownerPlayerId = 'p2';
 
       // p1 triggers final round
       game.players.p1.trainsRemaining = 0;
-      game = executeTurnAction(game, 'p1', { type: 'DRAW_TRAIN_CARDS' });
+      game = executeTurnAction(game, 'p1', { type: 'DRAW_TRAIN_CARDS' }); // moves to p2
+      game = executeTurnAction(game, 'p2', { type: 'DRAW_TRAIN_CARDS' }); // moves to p1
+      game = executeTurnAction(game, 'p1', { type: 'DRAW_TRAIN_CARDS' }); // finishes game
 
-      expect(game.status).toBe('active');
-      expect(game.currentPlayerId).toBe('p2');
-
-      // p2 takes final turn
-      game = executeTurnAction(game, 'p2', { type: 'DRAW_TRAIN_CARDS' });
-
-      // Game is now completed
       expect(game.status).toBe('completed');
+      expect(game.phase).toBe('finished');
 
-      // Check p1 final score:
-      // Route points: 4
-      // Tickets: +8 (boston->washington completed) -12 (boston->miami incomplete) = -4
-      // Total final score = 4 + (-4) = 0
+      // Check p1 breakdown & final score:
+      // Route points: 2 + 2 = 4
+      // Ticket points: +8 - 12 = -4
+      // Longest path length: 4 (Boston -> New York -> Washington). p2 has 6, so p1 gets 0 bonus.
+      // Final total = 4 - 4 + 0 = 0
+      expect(game.players.p1.scoreBreakdown?.routePoints).toBe(4);
+      expect(game.players.p1.scoreBreakdown?.destinationTicketPoints).toBe(-4);
+      expect(game.players.p1.scoreBreakdown?.longestPathLength).toBe(4);
+      expect(game.players.p1.scoreBreakdown?.longestPathBonus).toBe(0);
       expect(game.players.p1.score).toBe(0);
 
-      // Check p2 final score:
-      // Route points: 2
-      // Tickets: +2 (atlanta->charleston completed)
-      // Total final score = 2 + 2 = 4
-      expect(game.players.p2.score).toBe(4);
+      // Check p2 breakdown & final score:
+      // Route points: 2 (len 2) + 7 (len 4) = 9
+      // Ticket points: +2
+      // Longest path length: 6 (Atlanta -> Charleston -> Miami). Max path! Awarded 10 bonus.
+      // Final total = 9 + 2 + 10 = 21
+      expect(game.players.p2.scoreBreakdown?.routePoints).toBe(9);
+      expect(game.players.p2.scoreBreakdown?.destinationTicketPoints).toBe(2);
+      expect(game.players.p2.scoreBreakdown?.longestPathLength).toBe(6);
+      expect(game.players.p2.scoreBreakdown?.longestPathBonus).toBe(10);
+      expect(game.players.p2.score).toBe(21);
+    });
+
+    it('calculates longest continuous path with branching correctly', () => {
+      // Create mock routes forming a T-junction branch:
+      // Route 1: A -> B (len 3)
+      // Route 2: B -> C (len 4)
+      // Route 3: B -> D (len 2)
+      const mockRoutes = {
+        r1: { routeId: 'r1', cityA: 'A', cityB: 'B', length: 3, colorRequirement: 'any' as const, ownerPlayerId: 'p1' },
+        r2: { routeId: 'r2', cityA: 'B', cityB: 'C', length: 4, colorRequirement: 'any' as const, ownerPlayerId: 'p1' },
+        r3: { routeId: 'r3', cityA: 'B', cityB: 'D', length: 2, colorRequirement: 'any' as const, ownerPlayerId: 'p1' },
+      };
+
+      const claimedIds = ['r1', 'r2', 'r3'];
+
+      // Continuous path cannot use both B->C and B->D after A->B
+      // Longest continuous path is A -> B -> C (len 3 + 4 = 7)
+      const longest = calculateLongestContinuousPath(claimedIds, mockRoutes);
+      expect(longest).toBe(7);
+    });
+
+    it('awards 10-point bonus to all tied players when multiple players tie for longest path', () => {
+      const mockRoutes = {
+        r1: { routeId: 'r1', cityA: 'A', cityB: 'B', length: 5, colorRequirement: 'any' as const, ownerPlayerId: null },
+        r2: { routeId: 'r2', cityA: 'C', cityB: 'D', length: 5, colorRequirement: 'any' as const, ownerPlayerId: null },
+      };
+
+      const players = {
+        p1: {
+          playerId: 'p1',
+          displayName: 'Alice',
+          color: 'red',
+          ready: true,
+          trainCards: [],
+          destinationTickets: [],
+          claimedRoutes: ['r1'],
+          trainsRemaining: 40,
+          score: 0,
+        },
+        p2: {
+          playerId: 'p2',
+          displayName: 'Bob',
+          color: 'blue',
+          ready: true,
+          trainCards: [],
+          destinationTickets: [],
+          claimedRoutes: ['r2'],
+          trainsRemaining: 40,
+          score: 0,
+        },
+      };
+
+      const bonuses = calculateLongestPathBonuses(players, mockRoutes);
+
+      expect(bonuses.p1).toEqual({ length: 5, bonus: 10 });
+      expect(bonuses.p2).toEqual({ length: 5, bonus: 10 });
     });
   });
 });

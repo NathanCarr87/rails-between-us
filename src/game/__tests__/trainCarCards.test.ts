@@ -164,6 +164,9 @@ describe('Train Car Card System & Drawing Rules', () => {
 
     game.faceUpTrainCards = [loco1, loco2, loco3, red1, blue1];
 
+    // Ensure replacement cards from deck are non-locomotives to avoid multi-loop shuffle
+    game.trainCardDeck = game.trainCardDeck.map((c) => ({ ...c, color: 'red' }));
+
     const initialDiscardLength = game.trainCardDiscardPile.length;
 
     // Run locomotive refresh check

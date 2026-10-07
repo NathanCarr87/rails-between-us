@@ -19,6 +19,7 @@ import { PlayerHand } from './PlayerHand';
 import { Lobby } from './Lobby';
 import { DestinationTicketModal } from './DestinationTicketModal';
 import { FaceUpCards } from './FaceUpCards';
+import { Scoreboard } from './Scoreboard';
 
 export const DevGameView: React.FC = () => {
   const [activeGameId, setActiveGameId] = useState<string>(() => {
@@ -383,8 +384,14 @@ export const DevGameView: React.FC = () => {
         </div>
       )}
 
+      {/* Finished Game Scoreboard */}
+      {(game.phase === 'finished' || game.status === 'completed') && (
+        <Scoreboard game={game} onLeaveGame={handleLeaveGame} />
+      )}
+
       {/* Pending Destination Tickets Modal */}
-      {localPlayer?.pendingDestinationTickets &&
+      {game.phase === 'playing' &&
+        localPlayer?.pendingDestinationTickets &&
         localPlayer.pendingDestinationTickets.length > 0 && (
           <DestinationTicketModal
             key={localPlayer.pendingDestinationTickets.map((t) => t.id).join('-')}
@@ -399,20 +406,22 @@ export const DevGameView: React.FC = () => {
       <PlayerStatus
         game={game}
         localPlayerId={localPlayerId}
-        onDrawCards={handleDrawCards}
-        onDrawDestinationTickets={handleDrawDestinationTickets}
+        onDrawCards={game.phase === 'playing' ? handleDrawCards : undefined}
+        onDrawDestinationTickets={game.phase === 'playing' ? handleDrawDestinationTickets : undefined}
       />
 
       {/* Prominent 5 Face-Up Cards and Deck Display */}
-      <FaceUpCards
-        faceUpCards={game.faceUpTrainCards || []}
-        deckCount={game.trainCardDeck.length}
-        discardCount={game.trainCardDiscardPile.length}
-        cardsDrawnThisTurn={game.cardsDrawnThisTurn || 0}
-        isCurrentTurn={isLocalTurn}
-        onDrawFaceUpCard={handleDrawFaceUpCard}
-        onDrawDeckCard={handleDrawDeckCard}
-      />
+      {game.phase === 'playing' && (
+        <FaceUpCards
+          faceUpCards={game.faceUpTrainCards || []}
+          deckCount={game.trainCardDeck.length}
+          discardCount={game.trainCardDiscardPile.length}
+          cardsDrawnThisTurn={game.cardsDrawnThisTurn || 0}
+          isCurrentTurn={isLocalTurn}
+          onDrawFaceUpCard={handleDrawFaceUpCard}
+          onDrawDeckCard={handleDrawDeckCard}
+        />
+      )}
 
       {/* Local Player Hand */}
       {localPlayer && (
@@ -435,15 +444,20 @@ export const DevGameView: React.FC = () => {
           players={game.players}
           selectedRouteId={selectedRouteId}
           onSelectRoute={(routeId) => {
+            if (game.phase === 'finished') return;
             setErrorMessage(null);
             setSelectedRouteId(routeId);
           }}
-          onClaimRoute={(routeId) => handleClaimRoute(routeId)}
+          onClaimRoute={(routeId) => {
+            if (game.phase === 'finished') return;
+            handleClaimRoute(routeId);
+          }}
         />
       </section>
 
       {/* Control Panel / Actions */}
-      <div style={styles.controlGrid}>
+      {game.phase === 'playing' && (
+        <div style={styles.controlGrid}>
         {/* Controls / Turn Info */}
         <section style={styles.card}>
           <h3>Game Status</h3>
@@ -490,6 +504,7 @@ export const DevGameView: React.FC = () => {
           )}
         </section>
       </div>
+      )}
     </div>
   );
 };
