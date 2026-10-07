@@ -8,6 +8,7 @@ import {
   calculateRouteCost,
   canClaimRoute,
   claimRoute,
+  comparePlayersForWinner,
   confirmDestinationTicketSelection,
   createGame,
   drawTrainCards,
@@ -556,6 +557,126 @@ describe('Game Domain Model & Rules', () => {
 
       expect(bonuses.p1).toEqual({ length: 5, bonus: 10 });
       expect(bonuses.p2).toEqual({ length: 5, bonus: 10 });
+    });
+  });
+
+  describe('Final Score Tie-Breakers', () => {
+    it('ranks player with higher total score first', () => {
+      const p1 = {
+        playerId: 'p1',
+        displayName: 'Alice',
+        color: 'red',
+        ready: true,
+        trainCards: [],
+        destinationTickets: [],
+        claimedRoutes: [],
+        trainsRemaining: 30,
+        score: 100,
+      };
+      const p2 = {
+        playerId: 'p2',
+        displayName: 'Bob',
+        color: 'blue',
+        ready: true,
+        trainCards: [],
+        destinationTickets: [],
+        claimedRoutes: [],
+        trainsRemaining: 30,
+        score: 90,
+      };
+
+      expect(comparePlayersForWinner(p1, p2)).toBeLessThan(0); // p1 before p2
+      expect(comparePlayersForWinner(p2, p1)).toBeGreaterThan(0);
+    });
+
+    it('breaks score tie using completed destination tickets count', () => {
+      const p1 = {
+        playerId: 'p1',
+        displayName: 'Alice',
+        color: 'red',
+        ready: true,
+        trainCards: [],
+        destinationTickets: [],
+        claimedRoutes: [],
+        trainsRemaining: 30,
+        score: 80,
+        scoreBreakdown: {
+          routePoints: 60,
+          destinationTicketPoints: 10,
+          completedTicketsCount: 2,
+          longestPathLength: 10,
+          longestPathBonus: 10,
+          finalScore: 80,
+        },
+      };
+      const p2 = {
+        playerId: 'p2',
+        displayName: 'Bob',
+        color: 'blue',
+        ready: true,
+        trainCards: [],
+        destinationTickets: [],
+        claimedRoutes: [],
+        trainsRemaining: 30,
+        score: 80,
+        scoreBreakdown: {
+          routePoints: 50,
+          destinationTicketPoints: 20,
+          completedTicketsCount: 4,
+          longestPathLength: 8,
+          longestPathBonus: 0,
+          finalScore: 80,
+        },
+      };
+
+      // Both have 80 points, but Bob (p2) completed 4 tickets vs Alice (p1) 2 tickets. Bob should win!
+      expect(comparePlayersForWinner(p1, p2)).toBeGreaterThan(0); // p2 before p1
+      expect(comparePlayersForWinner(p2, p1)).toBeLessThan(0);
+    });
+
+    it('breaks score and completed tickets tie using longest continuous path length', () => {
+      const p1 = {
+        playerId: 'p1',
+        displayName: 'Alice',
+        color: 'red',
+        ready: true,
+        trainCards: [],
+        destinationTickets: [],
+        claimedRoutes: [],
+        trainsRemaining: 30,
+        score: 80,
+        scoreBreakdown: {
+          routePoints: 70,
+          destinationTicketPoints: 10,
+          completedTicketsCount: 3,
+          longestPathLength: 15,
+          longestPathBonus: 0,
+          finalScore: 80,
+        },
+      };
+      const p2 = {
+        playerId: 'p2',
+        displayName: 'Bob',
+        color: 'blue',
+        ready: true,
+        trainCards: [],
+        destinationTickets: [],
+        claimedRoutes: [],
+        trainsRemaining: 30,
+        score: 80,
+        scoreBreakdown: {
+          routePoints: 70,
+          destinationTicketPoints: 10,
+          completedTicketsCount: 3,
+          longestPathLength: 12,
+          longestPathBonus: 0,
+          finalScore: 80,
+        },
+      };
+
+      // Both have 80 points AND 3 completed tickets. Alice (p1) has longest path 15 vs Bob's 12. Alice wins!
+      expect(comparePlayersForWinner(p1, p2)).toBeLessThan(0); // p1 before p2
+      expect(comparePlayersForWinner(p2, p1)).toBeGreaterThan(0);
     });
   });
 });
