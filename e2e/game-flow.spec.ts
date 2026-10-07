@@ -379,6 +379,7 @@ test.describe('Rails Between Us - E2E Multiplayer Gameplay Suite', () => {
     await page.getByTestId('player-name-input').fill('Alice');
     await page.getByTestId('game-id-input').fill(gameId);
     await page.getByTestId('create-game-btn').click();
+    await expect(page.getByTestId('lobby-active-container')).toBeVisible();
 
     // Create a finished game state in localStorage where Alice and Bob tie on total score (50 pts),
     // but Bob completed 2 tickets vs Alice 1 ticket.
@@ -472,6 +473,7 @@ test.describe('Rails Between Us - E2E Multiplayer Gameplay Suite', () => {
     await page.getByTestId('player-name-input').fill('Alice');
     await page.getByTestId('game-id-input').fill(gameId);
     await page.getByTestId('create-game-btn').click();
+    await expect(page.getByTestId('lobby-active-container')).toBeVisible();
 
     // Alice and Bob have equal total score (60) AND equal completed tickets (2),
     // but Alice has longest path length 15 vs Bob 12. Alice should win!
