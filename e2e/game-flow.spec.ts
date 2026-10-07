@@ -141,11 +141,12 @@ test.describe('Rails Between Us - E2E Multiplayer Gameplay Suite', () => {
       await page1.getByTestId('color-swatch-#e53e3e').click();
       await page1.getByTestId('create-game-btn').click();
 
-      // Client 2 (Bob) joins game
+      // Client 2 (Bob) opens app and leaves active auto-session to join as Bob
       await page2.goto('/');
-      if (await page2.getByTestId('leave-lobby-btn').isVisible({ timeout: 2000 }).catch(() => false)) {
-        await page2.getByTestId('leave-lobby-btn').click();
-      }
+      await expect(page2.getByTestId('lobby-active-container')).toBeVisible();
+      await page2.getByTestId('leave-lobby-btn').click();
+
+      // Client 2 enters setup and joins existing game
       await expect(page2.getByTestId('lobby-setup-container')).toBeVisible();
       await page2.getByTestId('player-name-input').fill('Bob');
       await page2.getByTestId('game-id-input').fill(gameId);
@@ -237,7 +238,7 @@ test.describe('Rails Between Us - E2E Multiplayer Gameplay Suite', () => {
       const inactivePage = p1IsActive ? page2 : page1;
 
       // Simulate active player having 2 remaining trains in game state to trigger final round
-      await activePage.evaluate((gid) => {
+      await activePage.evaluate(async (gid) => {
         const key = `rails_game_${gid}`;
         const data = localStorage.getItem(key);
         if (data) {
@@ -245,8 +246,13 @@ test.describe('Rails Between Us - E2E Multiplayer Gameplay Suite', () => {
           const activePid = game.currentPlayerId;
           if (activePid && game.players[activePid]) {
             game.players[activePid].trainsRemaining = 2;
-            localStorage.setItem(key, JSON.stringify(game));
-            window.dispatchEvent(new StorageEvent('storage', { key, newValue: JSON.stringify(game) }));
+            const forceUpdate = (window as unknown as Record<string, (g: unknown) => Promise<unknown>>).__FORCE_UPDATE_GAME__;
+            if (forceUpdate) {
+              await forceUpdate(game);
+            } else {
+              localStorage.setItem(key, JSON.stringify(game));
+              window.dispatchEvent(new StorageEvent('storage', { key, newValue: JSON.stringify(game) }));
+            }
           }
         }
       }, gameId);
@@ -284,5 +290,269 @@ test.describe('Rails Between Us - E2E Multiplayer Gameplay Suite', () => {
       await page1.close();
       await page2.close();
     }
+  });
+
+  test('6. Destination ticket deck exhaustion flow - offer remaining tickets and return unselected to deck', async ({ context }) => {
+    const gameId = `e2e_ticket_exhaust_${Date.now()}`;
+
+    const page1 = await context.newPage();
+    const page2 = await context.newPage();
+
+    try {
+      await page1.goto('/');
+      await page1.getByTestId('player-name-input').fill('Alice');
+      await page1.getByTestId('game-id-input').fill(gameId);
+      await page1.getByTestId('create-game-btn').click();
+
+      await page2.goto('/');
+      await expect(page2.getByTestId('lobby-active-container')).toBeVisible();
+      await page2.getByTestId('leave-lobby-btn').click();
+
+      await expect(page2.getByTestId('lobby-setup-container')).toBeVisible();
+      await page2.getByTestId('player-name-input').fill('Bob');
+      await page2.getByTestId('game-id-input').fill(gameId);
+      await page2.getByTestId('color-swatch-#3182ce').click();
+      await page2.getByTestId('join-game-btn').click();
+
+      await expect(page1.getByTestId('players-list')).toContainText('Alice');
+      await expect(page1.getByTestId('players-list')).toContainText('Bob');
+
+      await page1.getByTestId('start-game-btn').click();
+      await expect(page1.getByTestId('in-game-container')).toBeVisible();
+      await expect(page2.getByTestId('in-game-container')).toBeVisible();
+
+      await page1.getByTestId('confirm-tickets-btn').click();
+      await page2.getByTestId('confirm-tickets-btn').click();
+
+      const activePlayerName = (await page1.getByTestId('current-player-name').textContent())?.trim();
+      const activePage = activePlayerName === 'Alice' ? page1 : page2;
+
+      // Manipulate game state to set destinationTicketDeck length to exactly 2 tickets
+      await activePage.evaluate(async (gid) => {
+        const key = `rails_game_${gid}`;
+        const data = localStorage.getItem(key);
+        if (data) {
+          const game = JSON.parse(data);
+          game.destinationTicketDeck = game.destinationTicketDeck.slice(0, 2);
+          const forceUpdate = (window as unknown as Record<string, (g: unknown) => Promise<unknown>>).__FORCE_UPDATE_GAME__;
+          if (forceUpdate) {
+            await forceUpdate(game);
+          } else {
+            localStorage.setItem(key, JSON.stringify(game));
+            window.dispatchEvent(new StorageEvent('storage', { key, newValue: JSON.stringify(game) }));
+          }
+        }
+      }, gameId);
+
+      // Active player draws destination tickets when only 2 remain in deck
+      await activePage.getByTestId('draw-tickets-btn').click();
+
+      const modal = activePage.getByTestId('destination-ticket-modal');
+      await expect(modal).toBeVisible();
+
+      // Checkbox count in modal should be 2
+      const checkboxes = modal.locator('input[type="checkbox"]');
+      await expect(checkboxes).toHaveCount(2);
+
+      // Uncheck second ticket to keep only 1 ticket
+      await checkboxes.nth(1).uncheck();
+      await activePage.getByTestId('confirm-tickets-btn').click();
+      await expect(modal).toBeHidden();
+
+      // Turn advances cleanly
+      const nextPlayerName = activePlayerName === 'Alice' ? 'Bob' : 'Alice';
+      await expect(page1.getByTestId('current-player-name')).toHaveText(nextPlayerName);
+
+      // Verify the returned 1 ticket went back to destinationTicketDeck
+      const deckCountText = await page1.locator('div', { hasText: 'Ticket Deck:' }).first().textContent();
+      expect(deckCountText).toContain('1 tickets');
+    } finally {
+      await page1.close();
+      await page2.close();
+    }
+  });
+
+  test('7. Final Score Tie-Breaker - Completed tickets count breaks score tie', async ({ page }) => {
+    const gameId = `e2e_tie_tickets_${Date.now()}`;
+
+    await page.goto('/');
+    await page.getByTestId('player-name-input').fill('Alice');
+    await page.getByTestId('game-id-input').fill(gameId);
+    await page.getByTestId('create-game-btn').click();
+    await expect(page.getByTestId('lobby-active-container')).toBeVisible();
+
+    // Create a finished game state in localStorage where Alice and Bob tie on total score (50 pts),
+    // but Bob completed 2 tickets vs Alice 1 ticket.
+    await page.evaluate(async (gid) => {
+      const key = `rails_game_${gid}`;
+      const existing = localStorage.getItem(key);
+      const baseGame = existing ? JSON.parse(existing) : {};
+
+      const finishedGame = {
+        ...baseGame,
+        gameId: gid,
+        phase: 'finished',
+        status: 'completed',
+        currentPlayerId: null,
+        turnNumber: 10,
+        playerOrder: ['p1', 'p2'],
+        players: {
+          p1: {
+            playerId: 'p1',
+            displayName: 'Alice',
+            color: '#e53e3e',
+            ready: true,
+            trainCards: [],
+            destinationTickets: [{ id: 't1', cityA: 'boston', cityB: 'new_york', points: 10 }],
+            claimedRoutes: [],
+            trainsRemaining: 0,
+            score: 50,
+            scoreBreakdown: {
+              routePoints: 40,
+              destinationTicketPoints: 10,
+              completedTicketsCount: 1,
+              longestPathLength: 10,
+              longestPathBonus: 0,
+              finalScore: 50,
+            },
+          },
+          p2: {
+            playerId: 'p2',
+            displayName: 'Bob',
+            color: '#3182ce',
+            ready: true,
+            trainCards: [],
+            destinationTickets: [
+              { id: 't2', cityA: 'chicago', cityB: 'st_louis', points: 10 },
+              { id: 't3', cityA: 'denver', cityB: 'helena', points: 10 },
+            ],
+            claimedRoutes: [],
+            trainsRemaining: 0,
+            score: 50,
+            scoreBreakdown: {
+              routePoints: 30,
+              destinationTicketPoints: 20,
+              completedTicketsCount: 2,
+              longestPathLength: 8,
+              longestPathBonus: 0,
+              finalScore: 50,
+            },
+          },
+        },
+        boardState: baseGame.boardState || { cities: {}, routes: {} },
+        trainCardDeck: [],
+        faceUpTrainCards: [],
+        trainCardDiscardPile: [],
+        destinationTicketDeck: [],
+        destinationTicketDiscardPile: [],
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+
+      const forceUpdate = (window as unknown as Record<string, (g: unknown) => Promise<unknown>>).__FORCE_UPDATE_GAME__;
+      if (forceUpdate) {
+        await forceUpdate(finishedGame);
+      } else {
+        localStorage.setItem(key, JSON.stringify(finishedGame));
+        window.dispatchEvent(new StorageEvent('storage', { key, newValue: JSON.stringify(finishedGame) }));
+      }
+    }, gameId);
+
+    await expect(page.getByTestId('finished-game-scoreboard')).toBeVisible();
+    await expect(page.getByTestId('winner-announcement')).toContainText('Bob wins with 50 points!');
+
+    // First row in table should be Bob (#1 rank)
+    const firstRow = page.locator('tr[data-testid^="player-score-row-"]').first();
+    await expect(firstRow).toContainText('Bob');
+  });
+
+  test('8. Final Score Tie-Breaker - Longest continuous path breaks complete tie', async ({ page }) => {
+    const gameId = `e2e_tie_longest_${Date.now()}`;
+
+    await page.goto('/');
+    await page.getByTestId('player-name-input').fill('Alice');
+    await page.getByTestId('game-id-input').fill(gameId);
+    await page.getByTestId('create-game-btn').click();
+    await expect(page.getByTestId('lobby-active-container')).toBeVisible();
+
+    // Alice and Bob have equal total score (60) AND equal completed tickets (2),
+    // but Alice has longest path length 15 vs Bob 12. Alice should win!
+    await page.evaluate(async (gid) => {
+      const key = `rails_game_${gid}`;
+      const existing = localStorage.getItem(key);
+      const baseGame = existing ? JSON.parse(existing) : {};
+
+      const finishedGame = {
+        ...baseGame,
+        gameId: gid,
+        phase: 'finished',
+        status: 'completed',
+        currentPlayerId: null,
+        turnNumber: 12,
+        playerOrder: ['p1', 'p2'],
+        players: {
+          p1: {
+            playerId: 'p1',
+            displayName: 'Alice',
+            color: '#e53e3e',
+            ready: true,
+            trainCards: [],
+            destinationTickets: [],
+            claimedRoutes: [],
+            trainsRemaining: 0,
+            score: 60,
+            scoreBreakdown: {
+              routePoints: 50,
+              destinationTicketPoints: 10,
+              completedTicketsCount: 2,
+              longestPathLength: 15,
+              longestPathBonus: 0,
+              finalScore: 60,
+            },
+          },
+          p2: {
+            playerId: 'p2',
+            displayName: 'Bob',
+            color: '#3182ce',
+            ready: true,
+            trainCards: [],
+            destinationTickets: [],
+            claimedRoutes: [],
+            trainsRemaining: 0,
+            score: 60,
+            scoreBreakdown: {
+              routePoints: 50,
+              destinationTicketPoints: 10,
+              completedTicketsCount: 2,
+              longestPathLength: 12,
+              longestPathBonus: 0,
+              finalScore: 60,
+            },
+          },
+        },
+        boardState: baseGame.boardState || { cities: {}, routes: {} },
+        trainCardDeck: [],
+        faceUpTrainCards: [],
+        trainCardDiscardPile: [],
+        destinationTicketDeck: [],
+        destinationTicketDiscardPile: [],
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+
+      const forceUpdate = (window as unknown as Record<string, (g: unknown) => Promise<unknown>>).__FORCE_UPDATE_GAME__;
+      if (forceUpdate) {
+        await forceUpdate(finishedGame);
+      } else {
+        localStorage.setItem(key, JSON.stringify(finishedGame));
+        window.dispatchEvent(new StorageEvent('storage', { key, newValue: JSON.stringify(finishedGame) }));
+      }
+    }, gameId);
+
+    await expect(page.getByTestId('finished-game-scoreboard')).toBeVisible();
+    await expect(page.getByTestId('winner-announcement')).toContainText('Alice wins with 60 points!');
+
+    const firstRow = page.locator('tr[data-testid^="player-score-row-"]').first();
+    await expect(firstRow).toContainText('Alice');
   });
 });

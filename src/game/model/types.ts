@@ -43,6 +43,7 @@ export interface Route {
 export interface ScoreBreakdown {
   routePoints: number;
   destinationTicketPoints: number;
+  completedTicketsCount: number;
   longestPathLength: number;
   longestPathBonus: number;
   finalScore: number;
