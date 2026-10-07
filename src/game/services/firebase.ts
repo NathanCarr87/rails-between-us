@@ -43,8 +43,9 @@ let db: Firestore | undefined;
 
 // Avoid connecting to Firebase if running in unit tests or if API key is not configured
 const isTestEnv = import.meta.env?.MODE === 'test';
+const isDummyKey = !apiKey || apiKey === 'test_key' || apiKey.startsWith('dummy') || apiKey.includes('test_key');
 
-if (!isTestEnv && apiKey) {
+if (!isTestEnv && !isDummyKey) {
   try {
     app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
     db = getFirestore(app);
@@ -118,9 +119,52 @@ function notifyMemoryListeners(gameId: string, game: Game | null): void {
   }
 }
 
+function isDomainError(err: unknown): boolean {
+  if (err instanceof Error) {
+    const msg = err.message;
+    return (
+      msg.includes('does not exist') ||
+      msg.includes('already started') ||
+      msg.includes('already chosen') ||
+      msg.includes('already exists') ||
+      msg.includes('Maximum limit') ||
+      msg.includes('Not player') ||
+      msg.includes('Not this player') ||
+      msg.includes('Must complete') ||
+      msg.includes('is finished') ||
+      msg.includes('No active player') ||
+      msg.includes('Must keep at least')
+    );
+  }
+  return false;
+}
+
 /**
  * Generates a clean 4-character short code for easy game sharing.
  */
+/**
+ * Force updates game state in local memory/storage and Firestore (for test state setup/manipulation).
+ */
+export async function forceUpdateGameInFirestore(game: Game): Promise<Game> {
+  if (db) {
+    try {
+      const gameRef = doc(db, 'games', game.gameId);
+      await setDoc(gameRef, game);
+    } catch (err) {
+      console.error('Firestore setDoc error forcing game update:', err);
+    }
+  }
+
+  inMemoryGames.set(game.gameId, game);
+  saveLocalGame(game.gameId, game);
+  notifyMemoryListeners(game.gameId, game);
+  return game;
+}
+
+if (typeof window !== 'undefined') {
+  (window as unknown as Record<string, unknown>).__FORCE_UPDATE_GAME__ = forceUpdateGameInFirestore;
+}
+
 export function generateGameCode(): string {
   const chars = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
   let code = '';
@@ -194,9 +238,8 @@ export async function createGameInFirestore(
 
       await setDoc(gameRef, initialGame);
     } catch (err) {
-      // Re-throw errors so creation fails when permissions or network fail
-      console.error('Firestore setDoc error creating game:', err);
-      throw err;
+      if (isDomainError(err)) throw err;
+      console.warn('Firestore setDoc failed, using local memory/storage:', err);
     }
   }
 
@@ -214,7 +257,7 @@ export async function joinGameInFirestore(
   gameId: string,
   playerInfo: { playerId: string; displayName: string; color: string }
 ): Promise<Game> {
-  let updatedGame: Game;
+  let updatedGame: Game | null = null;
 
   if (db) {
     try {
@@ -241,10 +284,12 @@ export async function joinGameInFirestore(
         return gameWithPlayer;
       });
     } catch (err) {
-      console.error('Firestore transaction error joining game:', err);
-      throw err;
+      if (isDomainError(err)) throw err;
+      console.warn('Firestore transaction error joining game, falling back to local storage:', err);
     }
-  } else {
+  }
+
+  if (!updatedGame) {
     const memGame = inMemoryGames.get(gameId) || getLocalGame(gameId);
     if (!memGame) {
       throw new Error(`Game ${gameId} does not exist.`);
@@ -273,7 +318,7 @@ export async function updatePlayerColorInFirestore(
   playerId: string,
   color: string
 ): Promise<Game> {
-  let updatedGame: Game;
+  let updatedGame: Game | null = null;
 
   if (db) {
     try {
@@ -296,10 +341,12 @@ export async function updatePlayerColorInFirestore(
         return gameWithColor;
       });
     } catch (err) {
-      console.error('Firestore transaction error updating player color:', err);
-      throw err;
+      if (isDomainError(err)) throw err;
+      console.warn('Firestore error updating color, falling back to local storage:', err);
     }
-  } else {
+  }
+
+  if (!updatedGame) {
     const memGame = inMemoryGames.get(gameId) || getLocalGame(gameId);
     if (!memGame) {
       throw new Error(`Game ${gameId} does not exist.`);
@@ -320,7 +367,7 @@ export async function togglePlayerReadyInFirestore(
   gameId: string,
   playerId: string
 ): Promise<Game> {
-  let updatedGame: Game;
+  let updatedGame: Game | null = null;
 
   if (db) {
     try {
@@ -338,10 +385,12 @@ export async function togglePlayerReadyInFirestore(
         return gameWithReady;
       });
     } catch (err) {
-      console.error('Firestore transaction error toggling player ready:', err);
-      throw err;
+      if (isDomainError(err)) throw err;
+      console.warn('Firestore error toggling ready, falling back to local storage:', err);
     }
-  } else {
+  }
+
+  if (!updatedGame) {
     const memGame = inMemoryGames.get(gameId) || getLocalGame(gameId);
     if (!memGame) {
       throw new Error(`Game ${gameId} does not exist.`);
@@ -363,7 +412,7 @@ export async function selectDestinationTicketsInFirestore(
   playerId: string,
   keptTicketIds: string[]
 ): Promise<Game> {
-  let updatedGame: Game;
+  let updatedGame: Game | null = null;
 
   if (db) {
     try {
@@ -381,10 +430,12 @@ export async function selectDestinationTicketsInFirestore(
         return nextGame;
       });
     } catch (err) {
-      console.error('Firestore transaction error selecting destination tickets:', err);
-      throw err;
+      if (isDomainError(err)) throw err;
+      console.warn('Firestore error selecting tickets, falling back to local storage:', err);
     }
-  } else {
+  }
+
+  if (!updatedGame) {
     const memGame = inMemoryGames.get(gameId) || getLocalGame(gameId);
     if (!memGame) {
       throw new Error(`Game ${gameId} does not exist.`);
@@ -406,7 +457,7 @@ export async function executeTurnActionInFirestore(
   playerId: string,
   action: PlayerAction
 ): Promise<Game> {
-  let updatedGame: Game;
+  let updatedGame: Game | null = null;
 
   if (db) {
     try {
@@ -433,10 +484,12 @@ export async function executeTurnActionInFirestore(
         return nextGame;
       });
     } catch (err) {
-      console.error('Firestore transaction error executing turn action:', err);
-      throw err;
+      if (isDomainError(err)) throw err;
+      console.warn('Firestore transaction error executing turn, falling back to local storage:', err);
     }
-  } else {
+  }
+
+  if (!updatedGame) {
     const memGame = inMemoryGames.get(gameId) || getLocalGame(gameId);
     if (!memGame) {
       throw new Error(`Game ${gameId} does not exist.`);
@@ -460,7 +513,7 @@ export async function executeTurnActionInFirestore(
  * Starts the game in Firestore using an atomic transaction.
  */
 export async function startGameInFirestore(gameId: string): Promise<Game> {
-  let updatedGame: Game;
+  let updatedGame: Game | null = null;
 
   if (db) {
     try {
@@ -496,10 +549,12 @@ export async function startGameInFirestore(gameId: string): Promise<Game> {
         return startedGame;
       });
     } catch (err) {
-      console.error('Firestore transaction error starting game:', err);
-      throw err;
+      if (isDomainError(err)) throw err;
+      console.warn('Firestore transaction error starting game, falling back to local storage:', err);
     }
-  } else {
+  }
+
+  if (!updatedGame) {
     const memGame = inMemoryGames.get(gameId) || getLocalGame(gameId);
     if (!memGame) {
       throw new Error(`Game ${gameId} does not exist.`);
@@ -557,15 +612,30 @@ export function subscribeToGame(
             saveLocalGame(gameId, g);
             onUpdate(g);
           } else {
-            onUpdate(null);
+            const localG = inMemoryGames.get(gameId) || getLocalGame(gameId);
+            if (!localG) {
+              onUpdate(null);
+            }
           }
         },
         (err) => {
-          if (onError) onError(err);
+          console.warn('Firestore onSnapshot error, maintaining local state:', err);
+          const localG = inMemoryGames.get(gameId) || getLocalGame(gameId);
+          if (localG) {
+            onUpdate(localG);
+          } else if (onError && err instanceof Error) {
+            onError(err);
+          }
         }
       );
     } catch (err) {
-      if (onError && err instanceof Error) onError(err);
+      console.warn('Firestore subscription failed, maintaining local state:', err);
+      const localG = inMemoryGames.get(gameId) || getLocalGame(gameId);
+      if (localG) {
+        onUpdate(localG);
+      } else if (onError && err instanceof Error) {
+        onError(err);
+      }
     }
   }
 

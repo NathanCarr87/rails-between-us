@@ -141,11 +141,12 @@ test.describe('Rails Between Us - E2E Multiplayer Gameplay Suite', () => {
       await page1.getByTestId('color-swatch-#e53e3e').click();
       await page1.getByTestId('create-game-btn').click();
 
-      // Client 2 (Bob) joins game
+      // Client 2 (Bob) opens app and leaves active auto-session to join as Bob
       await page2.goto('/');
-      if (await page2.getByTestId('leave-lobby-btn').isVisible({ timeout: 2000 }).catch(() => false)) {
-        await page2.getByTestId('leave-lobby-btn').click();
-      }
+      await expect(page2.getByTestId('lobby-active-container')).toBeVisible();
+      await page2.getByTestId('leave-lobby-btn').click();
+
+      // Client 2 enters setup and joins existing game
       await expect(page2.getByTestId('lobby-setup-container')).toBeVisible();
       await page2.getByTestId('player-name-input').fill('Bob');
       await page2.getByTestId('game-id-input').fill(gameId);
@@ -237,7 +238,7 @@ test.describe('Rails Between Us - E2E Multiplayer Gameplay Suite', () => {
       const inactivePage = p1IsActive ? page2 : page1;
 
       // Simulate active player having 2 remaining trains in game state to trigger final round
-      await activePage.evaluate((gid) => {
+      await activePage.evaluate(async (gid) => {
         const key = `rails_game_${gid}`;
         const data = localStorage.getItem(key);
         if (data) {
@@ -245,8 +246,13 @@ test.describe('Rails Between Us - E2E Multiplayer Gameplay Suite', () => {
           const activePid = game.currentPlayerId;
           if (activePid && game.players[activePid]) {
             game.players[activePid].trainsRemaining = 2;
-            localStorage.setItem(key, JSON.stringify(game));
-            window.dispatchEvent(new StorageEvent('storage', { key, newValue: JSON.stringify(game) }));
+            const forceUpdate = (window as unknown as Record<string, (g: unknown) => Promise<unknown>>).__FORCE_UPDATE_GAME__;
+            if (forceUpdate) {
+              await forceUpdate(game);
+            } else {
+              localStorage.setItem(key, JSON.stringify(game));
+              window.dispatchEvent(new StorageEvent('storage', { key, newValue: JSON.stringify(game) }));
+            }
           }
         }
       }, gameId);
@@ -299,9 +305,10 @@ test.describe('Rails Between Us - E2E Multiplayer Gameplay Suite', () => {
       await page1.getByTestId('create-game-btn').click();
 
       await page2.goto('/');
-      if (await page2.getByTestId('leave-lobby-btn').isVisible({ timeout: 2000 }).catch(() => false)) {
-        await page2.getByTestId('leave-lobby-btn').click();
-      }
+      await expect(page2.getByTestId('lobby-active-container')).toBeVisible();
+      await page2.getByTestId('leave-lobby-btn').click();
+
+      await expect(page2.getByTestId('lobby-setup-container')).toBeVisible();
       await page2.getByTestId('player-name-input').fill('Bob');
       await page2.getByTestId('game-id-input').fill(gameId);
       await page2.getByTestId('color-swatch-#3182ce').click();
@@ -321,14 +328,19 @@ test.describe('Rails Between Us - E2E Multiplayer Gameplay Suite', () => {
       const activePage = activePlayerName === 'Alice' ? page1 : page2;
 
       // Manipulate game state to set destinationTicketDeck length to exactly 2 tickets
-      await activePage.evaluate((gid) => {
+      await activePage.evaluate(async (gid) => {
         const key = `rails_game_${gid}`;
         const data = localStorage.getItem(key);
         if (data) {
           const game = JSON.parse(data);
           game.destinationTicketDeck = game.destinationTicketDeck.slice(0, 2);
-          localStorage.setItem(key, JSON.stringify(game));
-          window.dispatchEvent(new StorageEvent('storage', { key, newValue: JSON.stringify(game) }));
+          const forceUpdate = (window as unknown as Record<string, (g: unknown) => Promise<unknown>>).__FORCE_UPDATE_GAME__;
+          if (forceUpdate) {
+            await forceUpdate(game);
+          } else {
+            localStorage.setItem(key, JSON.stringify(game));
+            window.dispatchEvent(new StorageEvent('storage', { key, newValue: JSON.stringify(game) }));
+          }
         }
       }, gameId);
 
@@ -370,8 +382,13 @@ test.describe('Rails Between Us - E2E Multiplayer Gameplay Suite', () => {
 
     // Create a finished game state in localStorage where Alice and Bob tie on total score (50 pts),
     // but Bob completed 2 tickets vs Alice 1 ticket.
-    await page.evaluate((gid) => {
+    await page.evaluate(async (gid) => {
+      const key = `rails_game_${gid}`;
+      const existing = localStorage.getItem(key);
+      const baseGame = existing ? JSON.parse(existing) : {};
+
       const finishedGame = {
+        ...baseGame,
         gameId: gid,
         phase: 'finished',
         status: 'completed',
@@ -421,7 +438,7 @@ test.describe('Rails Between Us - E2E Multiplayer Gameplay Suite', () => {
             },
           },
         },
-        boardState: { cities: {}, routes: {} },
+        boardState: baseGame.boardState || { cities: {}, routes: {} },
         trainCardDeck: [],
         faceUpTrainCards: [],
         trainCardDiscardPile: [],
@@ -431,9 +448,13 @@ test.describe('Rails Between Us - E2E Multiplayer Gameplay Suite', () => {
         updatedAt: Date.now(),
       };
 
-      const key = `rails_game_${gid}`;
-      localStorage.setItem(key, JSON.stringify(finishedGame));
-      window.dispatchEvent(new StorageEvent('storage', { key, newValue: JSON.stringify(finishedGame) }));
+      const forceUpdate = (window as unknown as Record<string, (g: unknown) => Promise<unknown>>).__FORCE_UPDATE_GAME__;
+      if (forceUpdate) {
+        await forceUpdate(finishedGame);
+      } else {
+        localStorage.setItem(key, JSON.stringify(finishedGame));
+        window.dispatchEvent(new StorageEvent('storage', { key, newValue: JSON.stringify(finishedGame) }));
+      }
     }, gameId);
 
     await expect(page.getByTestId('finished-game-scoreboard')).toBeVisible();
@@ -454,8 +475,13 @@ test.describe('Rails Between Us - E2E Multiplayer Gameplay Suite', () => {
 
     // Alice and Bob have equal total score (60) AND equal completed tickets (2),
     // but Alice has longest path length 15 vs Bob 12. Alice should win!
-    await page.evaluate((gid) => {
+    await page.evaluate(async (gid) => {
+      const key = `rails_game_${gid}`;
+      const existing = localStorage.getItem(key);
+      const baseGame = existing ? JSON.parse(existing) : {};
+
       const finishedGame = {
+        ...baseGame,
         gameId: gid,
         phase: 'finished',
         status: 'completed',
@@ -502,7 +528,7 @@ test.describe('Rails Between Us - E2E Multiplayer Gameplay Suite', () => {
             },
           },
         },
-        boardState: { cities: {}, routes: {} },
+        boardState: baseGame.boardState || { cities: {}, routes: {} },
         trainCardDeck: [],
         faceUpTrainCards: [],
         trainCardDiscardPile: [],
@@ -512,9 +538,13 @@ test.describe('Rails Between Us - E2E Multiplayer Gameplay Suite', () => {
         updatedAt: Date.now(),
       };
 
-      const key = `rails_game_${gid}`;
-      localStorage.setItem(key, JSON.stringify(finishedGame));
-      window.dispatchEvent(new StorageEvent('storage', { key, newValue: JSON.stringify(finishedGame) }));
+      const forceUpdate = (window as unknown as Record<string, (g: unknown) => Promise<unknown>>).__FORCE_UPDATE_GAME__;
+      if (forceUpdate) {
+        await forceUpdate(finishedGame);
+      } else {
+        localStorage.setItem(key, JSON.stringify(finishedGame));
+        window.dispatchEvent(new StorageEvent('storage', { key, newValue: JSON.stringify(finishedGame) }));
+      }
     }, gameId);
 
     await expect(page.getByTestId('finished-game-scoreboard')).toBeVisible();
