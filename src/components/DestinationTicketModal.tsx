@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import type { City, DestinationTicket } from '../game/model/types';
 
 export interface DestinationTicketModalProps {
@@ -17,10 +17,6 @@ export const DestinationTicketModal: React.FC<DestinationTicketModalProps> = ({
   const [selectedIds, setSelectedIds] = useState<string[]>(() =>
     pendingTickets.map((t) => t.id)
   );
-
-  useEffect(() => {
-    setSelectedIds(pendingTickets.map((t) => t.id));
-  }, [pendingTickets]);
 
   const toggleSelection = (ticketId: string) => {
     setSelectedIds((prev) =>

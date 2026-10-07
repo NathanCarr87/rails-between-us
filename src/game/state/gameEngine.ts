@@ -634,9 +634,10 @@ export function selectDestinationTickets(
     ...player,
     destinationTickets: [...player.destinationTickets, ...keptTickets],
     pendingDestinationTickets: [],
-    pendingTicketsMinKeep: undefined,
-    pendingTicketsFromTurn: undefined,
   };
+
+  delete updatedPlayer.pendingTicketsMinKeep;
+  delete updatedPlayer.pendingTicketsFromTurn;
 
   // Return unselected tickets to the bottom of the destination ticket deck
   const updatedDeck = [...unselectedTickets, ...game.destinationTicketDeck];
