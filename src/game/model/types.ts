@@ -48,6 +48,8 @@ export interface Player {
   trainCards: TrainCard[];
   destinationTickets: DestinationTicket[];
   pendingDestinationTickets?: DestinationTicket[];
+  pendingTicketsMinKeep?: number;
+  pendingTicketsFromTurn?: boolean;
   claimedRoutes: string[]; // routeIds
   trainsRemaining: number;
   score: number;

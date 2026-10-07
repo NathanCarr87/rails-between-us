@@ -390,6 +390,7 @@ export const DevGameView: React.FC = () => {
             pendingTickets={localPlayer.pendingDestinationTickets}
             cities={game.boardState.cities}
             onConfirmSelection={handleConfirmTicketSelection}
+            minKeep={localPlayer.pendingTicketsMinKeep ?? 1}
           />
         )}
 

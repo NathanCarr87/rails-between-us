@@ -217,6 +217,8 @@ export function startGame(game: Game): Game {
       ...p,
       trainCards,
       pendingDestinationTickets: pendingTickets,
+      pendingTicketsMinKeep: 2,
+      pendingTicketsFromTurn: false,
       destinationTickets: p.destinationTickets ?? [],
     };
   }
@@ -324,6 +326,10 @@ export function canClaimRoute(
 
   if (game.currentPlayerId !== playerId) {
     return { allowed: false, reason: 'Not this player turn.' };
+  }
+
+  if (player.pendingDestinationTickets && player.pendingDestinationTickets.length > 0) {
+    return { allowed: false, reason: 'Must complete destination ticket selection first.' };
   }
 
   const route = game.boardState.routes[routeId];
@@ -461,6 +467,10 @@ export function drawSingleTrainCard(
 
   if (game.currentPlayerId !== null && game.currentPlayerId !== playerId) {
     throw new Error(`Cannot draw train cards: Not player ${playerId}'s turn.`);
+  }
+
+  if (player.pendingDestinationTickets && player.pendingDestinationTickets.length > 0) {
+    throw new Error('Must complete destination ticket selection first.');
   }
 
   const cardsDrawn = game.cardsDrawnThisTurn || 0;
@@ -624,6 +634,8 @@ export function selectDestinationTickets(
     ...player,
     destinationTickets: [...player.destinationTickets, ...keptTickets],
     pendingDestinationTickets: [],
+    pendingTicketsMinKeep: undefined,
+    pendingTicketsFromTurn: undefined,
   };
 
   // Return unselected tickets to the bottom of the destination ticket deck
@@ -652,18 +664,31 @@ export function confirmDestinationTicketSelection(
   }
 
   const pending = player.pendingDestinationTickets ?? [];
+  const minKeep = player.pendingTicketsMinKeep ?? 1;
+  const requiredKeep = Math.min(minKeep, pending.length);
+
+  if (pending.length > 0 && keptTicketIds.length < requiredKeep) {
+    throw new Error(`Must keep at least ${requiredKeep} destination ticket(s).`);
+  }
+
   let keptTickets: DestinationTicket[] = [];
   let unselectedTickets: DestinationTicket[] = [];
 
   if (pending.length > 0) {
     keptTickets = pending.filter((t) => keptTicketIds.includes(t.id));
     unselectedTickets = pending.filter((t) => !keptTicketIds.includes(t.id));
+
+    if (keptTickets.length < requiredKeep) {
+      throw new Error(`Must keep at least ${requiredKeep} destination ticket(s).`);
+    }
   }
+
+  const wasFromTurn = player.pendingTicketsFromTurn ?? false;
 
   const updatedGame = selectDestinationTickets(game, playerId, keptTickets, unselectedTickets);
 
-  // Advance turn only if this ticket selection was performed as an active turn action
-  if (isTurnAction && game.phase === 'playing' && game.currentPlayerId === playerId) {
+  // Advance turn if ticket selection was performed as an active turn action or drawn from a turn action
+  if ((isTurnAction || wasFromTurn) && game.phase === 'playing' && game.currentPlayerId === playerId) {
     return advanceTurn(updatedGame);
   }
 
@@ -809,23 +834,38 @@ export function executeDrawDestinationTicketsTurn(
     throw new Error(`Cannot draw destination tickets: Not player ${playerId}'s turn.`);
   }
 
+  const existingPlayer = game.players[playerId];
+  if (existingPlayer?.pendingDestinationTickets && existingPlayer.pendingDestinationTickets.length > 0) {
+    throw new Error('Must complete pending destination ticket selection first.');
+  }
+
+  if (game.cardsDrawnThisTurn && game.cardsDrawnThisTurn > 0) {
+    throw new Error('Cannot draw destination tickets after drawing train cards this turn.');
+  }
+
   const { game: updatedGame, drawnTickets } = drawDestinationTickets(game, playerId, count);
   const player = updatedGame.players[playerId];
 
   if (keptTicketIds !== undefined) {
-    const keptTickets = drawnTickets.filter((t) => keptTicketIds.includes(t.id));
-    const unselectedTickets = drawnTickets.filter((t) => !keptTicketIds.includes(t.id));
-    const gameWithSelected = selectDestinationTickets(
-      updatedGame,
-      playerId,
-      keptTickets,
-      unselectedTickets
-    );
-    return advanceTurn(gameWithSelected);
+    const tempGame = {
+      ...updatedGame,
+      players: {
+        ...updatedGame.players,
+        [playerId]: {
+          ...player,
+          pendingDestinationTickets: drawnTickets,
+          pendingTicketsMinKeep: 1,
+          pendingTicketsFromTurn: true,
+        },
+      },
+    };
+    return confirmDestinationTicketSelection(tempGame, playerId, keptTicketIds, true);
   } else {
     const updatedPlayer: Player = {
       ...player,
       pendingDestinationTickets: [...(player.pendingDestinationTickets || []), ...drawnTickets],
+      pendingTicketsMinKeep: 1,
+      pendingTicketsFromTurn: true,
     };
 
     return {

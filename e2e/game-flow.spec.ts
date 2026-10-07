@@ -126,4 +126,71 @@ test.describe('Rails Between Us - E2E Multiplayer Gameplay Suite', () => {
     await expect(page.getByTestId('lobby-error')).toBeVisible();
     await expect(page.getByTestId('lobby-error')).toContainText('does not exist');
   });
+
+  test('4. Destination ticket flow - draw during gameplay, confirm selection, and verify turn advancement', async ({ context }) => {
+    const gameId = `e2e_tickets_${Date.now()}`;
+
+    const page1 = await context.newPage();
+    const page2 = await context.newPage();
+
+    try {
+      // Client 1 (Alice) creates game
+      await page1.goto('/');
+      await page1.getByTestId('player-name-input').fill('Alice');
+      await page1.getByTestId('game-id-input').fill(gameId);
+      await page1.getByTestId('color-swatch-#e53e3e').click();
+      await page1.getByTestId('create-game-btn').click();
+
+      // Client 2 (Bob) joins game
+      await page2.goto('/');
+      await expect(page2.getByTestId('lobby-active-container')).toBeVisible();
+      await page2.getByTestId('leave-lobby-btn').click();
+      await page2.getByTestId('player-name-input').fill('Bob');
+      await page2.getByTestId('game-id-input').fill(gameId);
+      await page2.getByTestId('color-swatch-#3182ce').click();
+      await page2.getByTestId('join-game-btn').click();
+
+      // Verify both clients in lobby
+      await expect(page1.getByTestId('players-list')).toContainText('Alice');
+      await expect(page1.getByTestId('players-list')).toContainText('Bob');
+
+      // Start game
+      await page1.getByTestId('start-game-btn').click();
+      await expect(page1.getByTestId('in-game-container')).toBeVisible();
+      await expect(page2.getByTestId('in-game-container')).toBeVisible();
+
+      // Both players confirm initial 3 tickets
+      await page1.getByTestId('confirm-tickets-btn').click();
+      await page2.getByTestId('confirm-tickets-btn').click();
+
+      await expect(page1.getByTestId('player-tickets-section')).toContainText('Your Destination Tickets (3)');
+      await expect(page2.getByTestId('player-tickets-section')).toContainText('Your Destination Tickets (3)');
+
+      // Determine active player
+      const activePlayerName = (await page1.getByTestId('current-player-name').textContent())?.trim();
+      const activePage = activePlayerName === 'Alice' ? page1 : page2;
+
+      // Active player draws destination tickets during gameplay
+      await activePage.getByTestId('draw-tickets-btn').click();
+
+      // Modal appears offering 3 new tickets
+      const ticketModal = activePage.getByTestId('destination-ticket-modal');
+      await expect(ticketModal).toBeVisible();
+
+      // Active player keeps all 3 drawn tickets
+      await activePage.getByTestId('confirm-tickets-btn').click();
+      await expect(ticketModal).toBeHidden();
+
+      // Active player now has 6 kept tickets in hand
+      await expect(activePage.getByTestId('player-tickets-section')).toContainText('Your Destination Tickets (6)');
+
+      // Turn advances to the next player
+      const nextPlayerName = activePlayerName === 'Alice' ? 'Bob' : 'Alice';
+      await expect(page1.getByTestId('current-player-name')).toHaveText(nextPlayerName);
+      await expect(page2.getByTestId('current-player-name')).toHaveText(nextPlayerName);
+    } finally {
+      await page1.close();
+      await page2.close();
+    }
+  });
 });
