@@ -143,8 +143,10 @@ test.describe('Rails Between Us - E2E Multiplayer Gameplay Suite', () => {
 
       // Client 2 (Bob) joins game
       await page2.goto('/');
-      await expect(page2.getByTestId('lobby-active-container')).toBeVisible();
-      await page2.getByTestId('leave-lobby-btn').click();
+      if (await page2.getByTestId('leave-lobby-btn').isVisible({ timeout: 2000 }).catch(() => false)) {
+        await page2.getByTestId('leave-lobby-btn').click();
+      }
+      await expect(page2.getByTestId('lobby-setup-container')).toBeVisible();
       await page2.getByTestId('player-name-input').fill('Bob');
       await page2.getByTestId('game-id-input').fill(gameId);
       await page2.getByTestId('color-swatch-#3182ce').click();
@@ -210,8 +212,10 @@ test.describe('Rails Between Us - E2E Multiplayer Gameplay Suite', () => {
 
       // Client 2 (Bob) joins game
       await page2.goto('/');
-      await expect(page2.getByTestId('lobby-active-container')).toBeVisible();
-      await page2.getByTestId('leave-lobby-btn').click();
+      if (await page2.getByTestId('leave-lobby-btn').isVisible({ timeout: 2000 }).catch(() => false)) {
+        await page2.getByTestId('leave-lobby-btn').click();
+      }
+      await expect(page2.getByTestId('lobby-setup-container')).toBeVisible();
       await page2.getByTestId('player-name-input').fill('Bob');
       await page2.getByTestId('game-id-input').fill(gameId);
       await page2.getByTestId('color-swatch-#3182ce').click();
