@@ -387,6 +387,7 @@ export const DevGameView: React.FC = () => {
       {localPlayer?.pendingDestinationTickets &&
         localPlayer.pendingDestinationTickets.length > 0 && (
           <DestinationTicketModal
+            key={localPlayer.pendingDestinationTickets.map((t) => t.id).join('-')}
             pendingTickets={localPlayer.pendingDestinationTickets}
             cities={game.boardState.cities}
             onConfirmSelection={handleConfirmTicketSelection}
