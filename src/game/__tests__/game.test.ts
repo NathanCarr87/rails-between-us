@@ -6,6 +6,7 @@ import {
   calculateRouteCost,
   canClaimRoute,
   claimRoute,
+  confirmDestinationTicketSelection,
   createGame,
   drawTrainCards,
   executeTurnAction,
@@ -16,9 +17,21 @@ import {
   createGameInFirestore,
   executeTurnActionInFirestore,
   joinGameInFirestore,
+  selectDestinationTicketsInFirestore,
   startGameInFirestore,
 } from '../services/firebase';
-import type { TrainCard } from '../model/types';
+import type { Game, TrainCard } from '../model/types';
+
+function startAndConfirmGame(game: Game): Game {
+  let started = startGame(game);
+  for (const pid of started.playerOrder) {
+    const p = started.players[pid];
+    if (p && p.pendingDestinationTickets && p.pendingDestinationTickets.length > 0) {
+      started = confirmDestinationTicketSelection(started, pid, p.pendingDestinationTickets.map((t) => t.id));
+    }
+  }
+  return started;
+}
 
 describe('Game Domain Model & Rules', () => {
   it('creates a new game with default state', () => {
@@ -75,7 +88,7 @@ describe('Game Domain Model & Rules', () => {
     game = addPlayer(game, { playerId: 'p1', displayName: 'Alice', color: '#e53e3e' });
     game = addPlayer(game, { playerId: 'p2', displayName: 'Bob', color: '#3182ce' });
     game = addPlayer(game, { playerId: 'p3', displayName: 'Charlie', color: '#38a169' });
-    game = startGame(game);
+    game = startAndConfirmGame(game);
 
     expect(game.currentPlayerId).toBe('p1');
     expect(game.turnNumber).toBe(1);
@@ -95,7 +108,7 @@ describe('Game Domain Model & Rules', () => {
     let game = createGame();
     game = addPlayer(game, { playerId: 'p1', displayName: 'Alice', color: '#e53e3e' });
     game = addPlayer(game, { playerId: 'p2', displayName: 'Bob', color: '#3182ce' });
-    game = startGame(game);
+    game = startAndConfirmGame(game);
 
     // Give p1 2 red cards
     const redCards: TrainCard[] = [
@@ -127,7 +140,7 @@ describe('Game Domain Model & Rules', () => {
     let game = createGame();
     game = addPlayer(game, { playerId: 'p1', displayName: 'Alice', color: '#e53e3e' });
     game = addPlayer(game, { playerId: 'p2', displayName: 'Bob', color: '#3182ce' });
-    game = startGame(game);
+    game = startAndConfirmGame(game);
 
     const routeId = 'route_boston_new_york_red'; // length 2, color red
 
@@ -201,7 +214,7 @@ describe('Game Domain Model & Rules', () => {
       let game = createGame();
       game = addPlayer(game, { playerId: 'p1', displayName: 'Alice', color: '#e53e3e' });
       game = addPlayer(game, { playerId: 'p2', displayName: 'Bob', color: '#3182ce' });
-      game = startGame(game);
+      game = startAndConfirmGame(game);
 
       expect(game.currentPlayerId).toBe('p1');
       const p1InitialCardCount = game.players.p1.trainCards.length;
@@ -219,7 +232,7 @@ describe('Game Domain Model & Rules', () => {
       let game = createGame();
       game = addPlayer(game, { playerId: 'p1', displayName: 'Alice', color: '#e53e3e' });
       game = addPlayer(game, { playerId: 'p2', displayName: 'Bob', color: '#3182ce' });
-      game = startGame(game);
+      game = startAndConfirmGame(game);
 
       const redCards: TrainCard[] = [
         { id: 'c1', color: 'red' },
@@ -244,7 +257,7 @@ describe('Game Domain Model & Rules', () => {
       let game = createGame();
       game = addPlayer(game, { playerId: 'p1', displayName: 'Alice', color: '#e53e3e' });
       game = addPlayer(game, { playerId: 'p2', displayName: 'Bob', color: '#3182ce' });
-      game = startGame(game);
+      game = startAndConfirmGame(game);
 
       expect(game.currentPlayerId).toBe('p1');
       const initialTicketDeckCount = game.destinationTicketDeck.length;
@@ -272,7 +285,7 @@ describe('Game Domain Model & Rules', () => {
       let game = createGame();
       game = addPlayer(game, { playerId: 'p1', displayName: 'Alice', color: '#e53e3e' });
       game = addPlayer(game, { playerId: 'p2', displayName: 'Bob', color: '#3182ce' });
-      game = startGame(game);
+      game = startAndConfirmGame(game);
 
       expect(game.currentPlayerId).toBe('p1');
 
@@ -298,6 +311,18 @@ describe('Game Domain Model & Rules', () => {
       await createGameInFirestore(gameId, { playerId: 'p1', displayName: 'Alice', color: '#e53e3e' });
       await joinGameInFirestore(gameId, { playerId: 'p2', displayName: 'Bob', color: '#3182ce' });
       let game = await startGameInFirestore(gameId);
+
+      // Confirm initial tickets
+      game = await selectDestinationTicketsInFirestore(
+        gameId,
+        'p1',
+        game.players.p1.pendingDestinationTickets!.map((t) => t.id)
+      );
+      game = await selectDestinationTicketsInFirestore(
+        gameId,
+        'p2',
+        game.players.p2.pendingDestinationTickets!.map((t) => t.id)
+      );
 
       expect(game.currentPlayerId).toBe('p1');
       // Game start deals 4 initial train cards
@@ -327,7 +352,7 @@ describe('Game Domain Model & Rules', () => {
       game = addPlayer(game, { playerId: 'p1', displayName: 'Alice', color: '#e53e3e' });
       game = addPlayer(game, { playerId: 'p2', displayName: 'Bob', color: '#3182ce' });
       game = addPlayer(game, { playerId: 'p3', displayName: 'Charlie', color: '#38a169' });
-      game = startGame(game);
+      game = startAndConfirmGame(game);
 
       // Simulate p1 having 2 trains remaining
       game.players.p1.trainsRemaining = 2;
@@ -349,7 +374,7 @@ describe('Game Domain Model & Rules', () => {
       game = addPlayer(game, { playerId: 'p1', displayName: 'Alice', color: '#e53e3e' });
       game = addPlayer(game, { playerId: 'p2', displayName: 'Bob', color: '#3182ce' });
       game = addPlayer(game, { playerId: 'p3', displayName: 'Charlie', color: '#38a169' });
-      game = startGame(game);
+      game = startAndConfirmGame(game);
 
       // p1 triggers final round
       game.players.p1.trainsRemaining = 1;
@@ -376,7 +401,7 @@ describe('Game Domain Model & Rules', () => {
       let game = createGame();
       game = addPlayer(game, { playerId: 'p1', displayName: 'Alice', color: '#e53e3e' });
       game = addPlayer(game, { playerId: 'p2', displayName: 'Bob', color: '#3182ce' });
-      game = startGame(game);
+      game = startAndConfirmGame(game);
 
       // Setup p1 destination tickets and claimed routes
       // Ticket 1: Boston -> Washington (8 pts) - COMPLETED

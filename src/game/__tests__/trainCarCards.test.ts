@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   addPlayer,
   checkAndRefreshFaceUpLocomotives,
+  confirmDestinationTicketSelection,
   createGame,
   drawSingleTrainCard,
   executeTurnAction,
@@ -9,12 +10,23 @@ import {
 } from '../state/gameEngine';
 import type { Game, TrainCard } from '../model/types';
 
+function startAndConfirmGame(game: Game): Game {
+  let started = startGame(game);
+  for (const pid of started.playerOrder) {
+    const p = started.players[pid];
+    if (p && p.pendingDestinationTickets && p.pendingDestinationTickets.length > 0) {
+      started = confirmDestinationTicketSelection(started, pid, p.pendingDestinationTickets.map((t) => t.id));
+    }
+  }
+  return started;
+}
+
 describe('Train Car Card System & Drawing Rules', () => {
   it('1. Each player receives exactly 4 Train Car cards when the game starts', () => {
     let game = createGame();
     game = addPlayer(game, { playerId: 'p1', displayName: 'Alice', color: '#e53e3e' });
     game = addPlayer(game, { playerId: 'p2', displayName: 'Bob', color: '#3182ce' });
-    game = startGame(game);
+    game = startAndConfirmGame(game);
 
     expect(game.players.p1.trainCards).toHaveLength(4);
     expect(game.players.p2.trainCards).toHaveLength(4);
@@ -24,7 +36,7 @@ describe('Train Car Card System & Drawing Rules', () => {
     let game = createGame();
     game = addPlayer(game, { playerId: 'p1', displayName: 'Alice', color: '#e53e3e' });
     game = addPlayer(game, { playerId: 'p2', displayName: 'Bob', color: '#3182ce' });
-    game = startGame(game);
+    game = startAndConfirmGame(game);
 
     // Each player has their own distinct trainCards array in the game state
     const p1Hand = game.players.p1.trainCards;
@@ -48,7 +60,7 @@ describe('Train Car Card System & Drawing Rules', () => {
     let game = createGame();
     game = addPlayer(game, { playerId: 'p1', displayName: 'Alice', color: '#e53e3e' });
     game = addPlayer(game, { playerId: 'p2', displayName: 'Bob', color: '#3182ce' });
-    game = startGame(game);
+    game = startAndConfirmGame(game);
 
     expect(game.faceUpTrainCards).toHaveLength(5);
   });
@@ -57,7 +69,7 @@ describe('Train Car Card System & Drawing Rules', () => {
     let game = createGame();
     game = addPlayer(game, { playerId: 'p1', displayName: 'Alice', color: '#e53e3e' });
     game = addPlayer(game, { playerId: 'p2', displayName: 'Bob', color: '#3182ce' });
-    game = startGame(game);
+    game = startAndConfirmGame(game);
 
     // Set known face-up cards with colored card at index 0
     const coloredCard: TrainCard = { id: 'face_red_1', color: 'red' };
@@ -83,7 +95,7 @@ describe('Train Car Card System & Drawing Rules', () => {
     let game = createGame();
     game = addPlayer(game, { playerId: 'p1', displayName: 'Alice', color: '#e53e3e' });
     game = addPlayer(game, { playerId: 'p2', displayName: 'Bob', color: '#3182ce' });
-    game = startGame(game);
+    game = startAndConfirmGame(game);
 
     // Place locomotive at face-up index 0
     const locoCard: TrainCard = { id: 'face_loco_1', color: 'locomotive' };
@@ -103,7 +115,7 @@ describe('Train Car Card System & Drawing Rules', () => {
     let game = createGame();
     game = addPlayer(game, { playerId: 'p1', displayName: 'Alice', color: '#e53e3e' });
     game = addPlayer(game, { playerId: 'p2', displayName: 'Bob', color: '#3182ce' });
-    game = startGame(game);
+    game = startAndConfirmGame(game);
 
     // Place locomotive at top of train card deck
     const locoDeckCard: TrainCard = { id: 'deck_loco_1', color: 'locomotive' };
@@ -123,7 +135,7 @@ describe('Train Car Card System & Drawing Rules', () => {
     let game = createGame();
     game = addPlayer(game, { playerId: 'p1', displayName: 'Alice', color: '#e53e3e' });
     game = addPlayer(game, { playerId: 'p2', displayName: 'Bob', color: '#3182ce' });
-    game = startGame(game);
+    game = startAndConfirmGame(game);
 
     const replacementCard: TrainCard = { id: 'top_deck_card_1', color: 'blue' };
     game.trainCardDeck.push(replacementCard);
@@ -141,7 +153,7 @@ describe('Train Car Card System & Drawing Rules', () => {
     let game = createGame();
     game = addPlayer(game, { playerId: 'p1', displayName: 'Alice', color: '#e53e3e' });
     game = addPlayer(game, { playerId: 'p2', displayName: 'Bob', color: '#3182ce' });
-    game = startGame(game);
+    game = startAndConfirmGame(game);
 
     // Create face-up state with 3 locomotives
     const loco1: TrainCard = { id: 'l1', color: 'locomotive' };
@@ -170,7 +182,7 @@ describe('Train Car Card System & Drawing Rules', () => {
     let game = createGame();
     game = addPlayer(game, { playerId: 'p1', displayName: 'Alice', color: '#e53e3e' });
     game = addPlayer(game, { playerId: 'p2', displayName: 'Bob', color: '#3182ce' });
-    game = startGame(game);
+    game = startAndConfirmGame(game);
 
     expect(game.currentPlayerId).toBe('p1');
 
@@ -188,7 +200,7 @@ describe('Train Car Card System & Drawing Rules', () => {
     let game = createGame();
     game = addPlayer(game, { playerId: 'p1', displayName: 'Alice', color: '#e53e3e' });
     game = addPlayer(game, { playerId: 'p2', displayName: 'Bob', color: '#3182ce' });
-    game = startGame(game);
+    game = startAndConfirmGame(game);
 
     function getTotalCardCount(g: Game): number {
       const p1Cards = g.players.p1.trainCards.length;
