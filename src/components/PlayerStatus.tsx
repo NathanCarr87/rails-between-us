@@ -19,6 +19,13 @@ export const PlayerStatus: React.FC<PlayerStatusProps> = ({
 
   return (
     <div style={styles.container} data-testid="player-status-container">
+      {/* Final Round Banner */}
+      {game.isFinalRound && game.phase === 'playing' && (
+        <div style={styles.finalRoundBanner} data-testid="final-round-banner">
+          🔔 <strong>Final Round!</strong> Each player gets one last turn before the game ends.
+        </div>
+      )}
+
       {/* Game Header Status Bar */}
       <div style={styles.headerBar}>
         <div style={styles.statusItem}>
@@ -137,6 +144,16 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     alignItems: 'center',
     gap: '6px',
+  },
+  finalRoundBanner: {
+    backgroundColor: '#feebc8',
+    color: '#744210',
+    border: '2px solid #f6ad55',
+    padding: '10px 16px',
+    borderRadius: '8px',
+    fontSize: '15px',
+    textAlign: 'center',
+    fontWeight: '500',
   },
   label: {
     color: '#718096',

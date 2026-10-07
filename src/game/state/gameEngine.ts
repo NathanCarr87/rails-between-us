@@ -248,12 +248,133 @@ export function startGame(game: Game): Game {
   return checkAndRefreshFaceUpLocomotives(startedGame);
 }
 
+export function calculateLongestContinuousPath(
+  claimedRouteIds: string[],
+  routes: Record<string, Route>
+): number {
+  if (claimedRouteIds.length === 0) return 0;
+
+  interface Edge {
+    edgeId: string;
+    toCity: string;
+    length: number;
+  }
+
+  const adj = new Map<string, Edge[]>();
+
+  for (const routeId of claimedRouteIds) {
+    const route = routes[routeId];
+    if (!route) continue;
+
+    if (!adj.has(route.cityA)) adj.set(route.cityA, []);
+    if (!adj.has(route.cityB)) adj.set(route.cityB, []);
+
+    adj.get(route.cityA)!.push({ edgeId: route.routeId, toCity: route.cityB, length: route.length });
+    adj.get(route.cityB)!.push({ edgeId: route.routeId, toCity: route.cityA, length: route.length });
+  }
+
+  let maxPathLength = 0;
+
+  function dfs(currentCity: string, visitedEdges: Set<string>, currentLength: number) {
+    if (currentLength > maxPathLength) {
+      maxPathLength = currentLength;
+    }
+
+    const edges = adj.get(currentCity);
+    if (!edges) return;
+
+    for (const edge of edges) {
+      if (!visitedEdges.has(edge.edgeId)) {
+        visitedEdges.add(edge.edgeId);
+        dfs(edge.toCity, visitedEdges, currentLength + edge.length);
+        visitedEdges.delete(edge.edgeId);
+      }
+    }
+  }
+
+  for (const startCity of adj.keys()) {
+    dfs(startCity, new Set<string>(), 0);
+  }
+
+  return maxPathLength;
+}
+
+export function calculateLongestPathBonuses(
+  players: Record<string, Player>,
+  routes: Record<string, Route>
+): Record<string, { length: number; bonus: number }> {
+  const playerPaths: Record<string, number> = {};
+  let maxLength = 0;
+
+  for (const pid of Object.keys(players)) {
+    const p = players[pid];
+    const len = calculateLongestContinuousPath(p.claimedRoutes, routes);
+    playerPaths[pid] = len;
+    if (len > maxLength) {
+      maxLength = len;
+    }
+  }
+
+  const result: Record<string, { length: number; bonus: number }> = {};
+  for (const pid of Object.keys(players)) {
+    const len = playerPaths[pid] || 0;
+    const bonus = maxLength > 0 && len === maxLength ? 10 : 0;
+    result[pid] = { length: len, bonus };
+  }
+
+  return result;
+}
+
+export function calculateFinalGameScores(game: Game): Record<string, Player> {
+  const routes = game.boardState.routes;
+  const longestPathResults = calculateLongestPathBonuses(game.players, routes);
+  const updatedPlayers: Record<string, Player> = {};
+
+  for (const pid of game.playerOrder) {
+    const p = game.players[pid];
+    if (!p) continue;
+
+    let routePoints = 0;
+    for (const routeId of p.claimedRoutes) {
+      const route = routes[routeId];
+      if (route) {
+        routePoints += getPointsForRouteLength(route.length);
+      }
+    }
+
+    const destinationTicketPoints = calculateDestinationTicketScore(
+      p.destinationTickets,
+      p.claimedRoutes,
+      routes
+    );
+
+    const longestPathInfo = longestPathResults[pid] || { length: 0, bonus: 0 };
+
+    const finalScore = routePoints + destinationTicketPoints + longestPathInfo.bonus;
+
+    updatedPlayers[pid] = {
+      ...p,
+      score: finalScore,
+      scoreBreakdown: {
+        routePoints,
+        destinationTicketPoints,
+        longestPathLength: longestPathInfo.length,
+        longestPathBonus: longestPathInfo.bonus,
+        finalScore,
+      },
+    };
+  }
+
+  return updatedPlayers;
+}
+
 export function advanceTurn(game: Game): Game {
   if (game.phase !== 'playing' || game.status === 'completed' || game.playerOrder.length === 0) {
     return game;
   }
 
-  let isFinalRound = game.isFinalRound ?? false;
+  const wasAlreadyFinalRound = game.isFinalRound ?? false;
+  let isFinalRound = wasAlreadyFinalRound;
   let finalRoundTriggeredBy = game.finalRoundTriggeredBy ?? null;
 
   // Check if current active player triggers final round (trainsRemaining <= 2)
@@ -265,28 +386,16 @@ export function advanceTurn(game: Game): Game {
     }
   }
 
-  const currentIndex = game.currentPlayerId ? game.playerOrder.indexOf(game.currentPlayerId) : -1;
-  const nextIndex = (currentIndex + 1) % game.playerOrder.length;
-  const nextPlayerId = game.playerOrder[nextIndex];
-
-  // If final round was triggered and we have looped back to the player who triggered it
-  if (isFinalRound && nextPlayerId === finalRoundTriggeredBy) {
-    const finalPlayers: Record<string, Player> = {};
-    for (const pid of game.playerOrder) {
-      const p = game.players[pid];
-      if (p) {
-        finalPlayers[pid] = {
-          ...p,
-          score: calculateFinalPlayerScore(p, game.boardState.routes),
-        };
-      }
-    }
+  // If the turn that just ended was taken during the final round, AND it was played by the player who triggered the final round
+  if (wasAlreadyFinalRound && game.currentPlayerId === finalRoundTriggeredBy) {
+    const finalPlayers = calculateFinalGameScores(game);
 
     return {
       ...game,
       phase: 'finished',
       status: 'completed',
       currentPlayerId: null,
+      cardsDrawnThisTurn: 0,
       isFinalRound: true,
       finalRoundTriggeredBy,
       players: finalPlayers,
@@ -294,6 +403,10 @@ export function advanceTurn(game: Game): Game {
       updatedAt: Date.now(),
     };
   }
+
+  const currentIndex = game.currentPlayerId ? game.playerOrder.indexOf(game.currentPlayerId) : -1;
+  const nextIndex = (currentIndex + 1) % game.playerOrder.length;
+  const nextPlayerId = game.playerOrder[nextIndex];
 
   return {
     ...game,
@@ -319,6 +432,10 @@ export function canClaimRoute(
   routeId: string,
   cardsToUse: TrainCard[]
 ): { allowed: boolean; reason?: string } {
+  if (game.phase === 'finished' || game.status === 'completed') {
+    return { allowed: false, reason: 'Game is finished.' };
+  }
+
   const player = game.players[playerId];
   if (!player) {
     return { allowed: false, reason: 'Player does not exist.' };
@@ -460,6 +577,10 @@ export function drawSingleTrainCard(
   source: 'deck' | 'faceUp',
   faceUpIndex?: number
 ): Game {
+  if (game.phase === 'finished' || game.status === 'completed') {
+    throw new Error('Cannot draw train cards: Game is finished.');
+  }
+
   const player = game.players[playerId];
   if (!player) {
     throw new Error(`Player ${playerId} does not exist.`);
@@ -659,6 +780,10 @@ export function confirmDestinationTicketSelection(
   keptTicketIds: string[],
   isTurnAction: boolean = false
 ): Game {
+  if (game.phase === 'finished' || game.status === 'completed') {
+    throw new Error('Cannot select destination tickets: Game is finished.');
+  }
+
   const player = game.players[playerId];
   if (!player) {
     throw new Error(`Player ${playerId} does not exist.`);
@@ -831,6 +956,10 @@ export function executeDrawDestinationTicketsTurn(
   count: number = 3,
   keptTicketIds?: string[]
 ): Game {
+  if (game.phase === 'finished' || game.status === 'completed') {
+    throw new Error('Cannot draw destination tickets: Game is finished.');
+  }
+
   if (game.currentPlayerId !== playerId) {
     throw new Error(`Cannot draw destination tickets: Not player ${playerId}'s turn.`);
   }
@@ -881,6 +1010,10 @@ export function executeDrawDestinationTicketsTurn(
 }
 
 export function executeTurnAction(game: Game, playerId: string, action: PlayerAction): Game {
+  if (game.phase === 'finished' || game.status === 'completed') {
+    throw new Error('Cannot perform action: Game is finished.');
+  }
+
   switch (action.type) {
     case 'DRAW_TRAIN_CARD':
       return drawSingleTrainCard(game, playerId, action.source, action.index);

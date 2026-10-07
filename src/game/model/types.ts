@@ -40,6 +40,14 @@ export interface Route {
   parallelRouteGroupId?: string | null;
 }
 
+export interface ScoreBreakdown {
+  routePoints: number;
+  destinationTicketPoints: number;
+  longestPathLength: number;
+  longestPathBonus: number;
+  finalScore: number;
+}
+
 export interface Player {
   playerId: string;
   displayName: string;
@@ -53,6 +61,7 @@ export interface Player {
   claimedRoutes: string[]; // routeIds
   trainsRemaining: number;
   score: number;
+  scoreBreakdown?: ScoreBreakdown;
 }
 
 export interface BoardState {
