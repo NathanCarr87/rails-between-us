@@ -6,6 +6,7 @@ import {
   createSampleTrainDeck,
   getPointsForRouteLength,
   INITIAL_TRAINS_PER_PLAYER,
+  STANDARD_TRAIN_COLORS,
   shuffleDeck,
 } from '../rules/defaults';
 
@@ -402,54 +403,157 @@ export function comparePlayersForWinner(a: Player, b: Player): number {
   return 0;
 }
 
+export function hasLegalActions(game: Game, playerId: string): boolean {
+  if (game.phase !== 'playing' || game.status === 'completed') {
+    return false;
+  }
+
+  const player = game.players[playerId];
+  if (!player) {
+    return false;
+  }
+
+  // 1. Pending destination tickets must be confirmed
+  if (player.pendingDestinationTickets && player.pendingDestinationTickets.length > 0) {
+    return true;
+  }
+
+  // 2. Can draw train cards (deck, discard, or face-up)
+  const totalTrainCardsAvailable =
+    game.trainCardDeck.length +
+    game.trainCardDiscardPile.length +
+    game.faceUpTrainCards.length;
+  if (totalTrainCardsAvailable > 0) {
+    return true;
+  }
+
+  // 3. Can draw destination tickets
+  if (game.destinationTicketDeck.length > 0) {
+    return true;
+  }
+
+  // 4. Can claim a route on the board
+  if (player.trainsRemaining > 0) {
+    const unclaimedRoutes = Object.values(game.boardState.routes).filter(
+      (r) => r.ownerPlayerId === null
+    );
+
+    // Group player cards by color
+    const playerCardCounts: Record<string, number> = {};
+    let locoCount = 0;
+    for (const card of player.trainCards) {
+      if (card.color === 'locomotive') {
+        locoCount++;
+      } else {
+        playerCardCounts[card.color] = (playerCardCounts[card.color] || 0) + 1;
+      }
+    }
+
+    for (const route of unclaimedRoutes) {
+      if (player.trainsRemaining < route.length) {
+        continue;
+      }
+
+      if (route.colorRequirement !== 'any') {
+        const matchingCards = (playerCardCounts[route.colorRequirement] || 0) + locoCount;
+        if (matchingCards >= route.length) {
+          return true;
+        }
+      } else {
+        // Any color route: check if player has enough cards of ANY standard color or locomotives alone
+        for (const col of STANDARD_TRAIN_COLORS) {
+          if ((playerCardCounts[col] || 0) + locoCount >= route.length) {
+            return true;
+          }
+        }
+        if (locoCount >= route.length) {
+          return true;
+        }
+      }
+    }
+  }
+
+  return false;
+}
+
 export function advanceTurn(game: Game): Game {
   if (game.phase !== 'playing' || game.status === 'completed' || game.playerOrder.length === 0) {
     return game;
   }
 
-  const wasAlreadyFinalRound = game.isFinalRound ?? false;
-  let isFinalRound = wasAlreadyFinalRound;
-  let finalRoundTriggeredBy = game.finalRoundTriggeredBy ?? null;
+  let currentGame = game;
+  let visitedPlayersCount = 0;
 
-  // Check if current active player triggers final round (trainsRemaining <= 2)
-  if (!isFinalRound && game.currentPlayerId) {
-    const activePlayer = game.players[game.currentPlayerId];
-    if (activePlayer && activePlayer.trainsRemaining <= 2) {
-      isFinalRound = true;
-      finalRoundTriggeredBy = game.currentPlayerId;
-      console.log(`[advanceTurn] Final round triggered by ${activePlayer.displayName} (${game.currentPlayerId})! Trains remaining: ${activePlayer.trainsRemaining}`);
+  while (visitedPlayersCount < currentGame.playerOrder.length) {
+    const wasAlreadyFinalRound = currentGame.isFinalRound ?? false;
+    let isFinalRound = wasAlreadyFinalRound;
+    let finalRoundTriggeredBy = currentGame.finalRoundTriggeredBy ?? null;
+
+    // Check if current active player triggers final round (trainsRemaining <= 2)
+    if (!isFinalRound && currentGame.currentPlayerId) {
+      const activePlayer = currentGame.players[currentGame.currentPlayerId];
+      if (activePlayer && activePlayer.trainsRemaining <= 2) {
+        isFinalRound = true;
+        finalRoundTriggeredBy = currentGame.currentPlayerId;
+        console.log(
+          `[advanceTurn] Final round triggered by ${activePlayer.displayName} (${currentGame.currentPlayerId})! Trains remaining: ${activePlayer.trainsRemaining}`
+        );
+      }
     }
-  }
 
-  // If the turn that just ended was taken during the final round, AND it was played by the player who triggered the final round
-  if (wasAlreadyFinalRound && game.currentPlayerId === finalRoundTriggeredBy) {
-    const finalPlayers = calculateFinalGameScores(game);
+    // If turn that just ended was taken during final round AND played by player who triggered final round
+    if (wasAlreadyFinalRound && currentGame.currentPlayerId === finalRoundTriggeredBy) {
+      const finalPlayers = calculateFinalGameScores(currentGame);
+      return {
+        ...currentGame,
+        phase: 'finished',
+        status: 'completed',
+        currentPlayerId: null,
+        cardsDrawnThisTurn: 0,
+        isFinalRound: true,
+        finalRoundTriggeredBy,
+        players: finalPlayers,
+        turnNumber: currentGame.turnNumber + 1,
+        updatedAt: Date.now(),
+      };
+    }
 
-    return {
-      ...game,
-      phase: 'finished',
-      status: 'completed',
-      currentPlayerId: null,
+    const currentIndex = currentGame.currentPlayerId
+      ? currentGame.playerOrder.indexOf(currentGame.currentPlayerId)
+      : -1;
+    const nextIndex = (currentIndex + 1) % currentGame.playerOrder.length;
+    const nextPlayerId = currentGame.playerOrder[nextIndex];
+
+    const nextGame: Game = {
+      ...currentGame,
+      currentPlayerId: nextPlayerId,
+      turnNumber: currentGame.turnNumber + 1,
       cardsDrawnThisTurn: 0,
-      isFinalRound: true,
+      isFinalRound,
       finalRoundTriggeredBy,
-      players: finalPlayers,
-      turnNumber: game.turnNumber + 1,
       updatedAt: Date.now(),
     };
+
+    if (hasLegalActions(nextGame, nextPlayerId)) {
+      return nextGame;
+    }
+
+    console.log(
+      `[advanceTurn] Player ${nextPlayerId} has no legal actions available. Auto-advancing turn.`
+    );
+    currentGame = nextGame;
+    visitedPlayersCount++;
   }
 
-  const currentIndex = game.currentPlayerId ? game.playerOrder.indexOf(game.currentPlayerId) : -1;
-  const nextIndex = (currentIndex + 1) % game.playerOrder.length;
-  const nextPlayerId = game.playerOrder[nextIndex];
-
+  // If all players have no legal actions left, complete the game
+  const finalPlayers = calculateFinalGameScores(currentGame);
   return {
-    ...game,
-    currentPlayerId: nextPlayerId,
-    turnNumber: game.turnNumber + 1,
+    ...currentGame,
+    phase: 'finished',
+    status: 'completed',
+    currentPlayerId: null,
     cardsDrawnThisTurn: 0,
-    isFinalRound,
-    finalRoundTriggeredBy,
+    players: finalPlayers,
     updatedAt: Date.now(),
   };
 }
@@ -675,9 +779,18 @@ export function drawSingleTrainCard(
     }
   } else {
     drawnCard = popFromDeck();
-    if (!drawnCard) {
-      throw new Error('No train cards remaining in deck or discard pile.');
+  }
+
+  if (!drawnCard) {
+    const totalRemaining = deck.length + discard.length + faceUp.length;
+    if (cardsDrawn >= 1 || totalRemaining === 0) {
+      const resetGame = {
+        ...game,
+        cardsDrawnThisTurn: 0,
+      };
+      return advanceTurn(resetGame);
     }
+    return game;
   }
 
   const updatedPlayer: Player = {

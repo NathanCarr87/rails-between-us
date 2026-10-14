@@ -406,6 +406,98 @@ describe('Game Domain Model & Rules', () => {
       expect(game.currentPlayerId).toBeNull();
     });
 
+    it('allows a player with 0 trains to take final turn if train cards exist', () => {
+      let game = createGame();
+      game = addPlayer(game, { playerId: 'p1', displayName: 'Alice', color: '#e53e3e' });
+      game = addPlayer(game, { playerId: 'p2', displayName: 'Bob', color: '#3182ce' });
+      game = startAndConfirmGame(game);
+
+      // Setup p2 with 0 trains remaining
+      game.players.p2.trainsRemaining = 0;
+      game.players.p2.trainCards = [];
+      game.destinationTicketDeck = [];
+
+      // Train cards exist in deck. p2 can take final turn drawing cards.
+      game.trainCardDeck = [
+        { id: 'deck_card_1', color: 'red' },
+        { id: 'deck_card_2', color: 'blue' },
+      ];
+      game.trainCardDiscardPile = [];
+      game.faceUpTrainCards = [];
+
+      // p1 triggers final round by claiming a route (leaving 1 train)
+      const routeId = 'route_boston_new_york_red';
+      const redCards: TrainCard[] = [
+        { id: 'c1', color: 'red' },
+        { id: 'c2', color: 'red' },
+      ];
+      game.players.p1.trainCards = [...redCards];
+      game.players.p1.trainsRemaining = 3;
+
+      game = executeTurnAction(game, 'p1', {
+        type: 'CLAIM_ROUTE',
+        routeId,
+        cardsToUse: redCards,
+      });
+
+      // Final round triggered by p1. Turn moves to p2 because p2 can draw cards from deck.
+      expect(game.isFinalRound).toBe(true);
+      expect(game.finalRoundTriggeredBy).toBe('p1');
+      expect(game.currentPlayerId).toBe('p2');
+
+      // p2 draws the remaining 2 train cards, leaving deck empty!
+      game = executeTurnAction(game, 'p2', { type: 'DRAW_TRAIN_CARDS' });
+
+      // p2's turn finishes. Turn moves to p1 for p1's final turn.
+      expect(game.currentPlayerId).toBe('p1');
+
+      // p1 takes their final turn
+      game = executeTurnAction(game, 'p1', { type: 'DRAW_TRAIN_CARDS' });
+
+      // Game completes cleanly!
+      expect(game.status).toBe('completed');
+      expect(game.phase).toBe('finished');
+      expect(game.currentPlayerId).toBeNull();
+    });
+
+    it('auto-advances final turn when a player with 0 trains has no legal actions available', () => {
+      let game = createGame();
+      game = addPlayer(game, { playerId: 'p1', displayName: 'Alice', color: '#e53e3e' });
+      game = addPlayer(game, { playerId: 'p2', displayName: 'Bob', color: '#3182ce' });
+      game = startAndConfirmGame(game);
+
+      // Setup final round state triggered by p1
+      game = {
+        ...game,
+        isFinalRound: true,
+        finalRoundTriggeredBy: 'p1',
+        currentPlayerId: 'p2', // Turn moved to p2 for p2's final turn
+        trainCardDeck: [],
+        trainCardDiscardPile: [],
+        faceUpTrainCards: [],
+        destinationTicketDeck: [],
+      };
+
+      // p2 has 0 trains remaining, no cards
+      game.players.p2.trainsRemaining = 0;
+      game.players.p2.trainCards = [];
+
+      // p1 has 0 trains remaining, no cards
+      game.players.p1.trainsRemaining = 0;
+      game.players.p1.trainCards = [];
+
+      // Call advanceTurn on p2's turn
+      game = advanceTurn(game);
+
+      // p2 had no legal actions. advanceTurn auto-advanced past p2 to p1's final turn.
+      // Since p1 also had no legal actions, advanceTurn auto-completed the final round!
+      expect(game.isFinalRound).toBe(true);
+      expect(game.finalRoundTriggeredBy).toBe('p1');
+      expect(game.status).toBe('completed');
+      expect(game.phase).toBe('finished');
+      expect(game.currentPlayerId).toBeNull();
+    });
+
     it('rejects gameplay actions after game ends', () => {
       let game = createGame();
       game = addPlayer(game, { playerId: 'p1', displayName: 'Alice', color: '#e53e3e' });

@@ -54,11 +54,11 @@ export const FaceUpCards: React.FC<FaceUpCardsProps> = ({
         <button
           style={{
             ...styles.deckCard,
-            opacity: isCurrentTurn && deckCount > 0 ? 1 : 0.6,
-            cursor: isCurrentTurn && deckCount > 0 ? 'pointer' : 'not-allowed',
+            opacity: isCurrentTurn && (deckCount > 0 || discardCount > 0) ? 1 : 0.6,
+            cursor: isCurrentTurn && (deckCount > 0 || discardCount > 0) ? 'pointer' : 'not-allowed',
           }}
-          onClick={() => isCurrentTurn && deckCount > 0 && onDrawDeckCard?.()}
-          disabled={!isCurrentTurn || deckCount === 0}
+          onClick={() => isCurrentTurn && (deckCount > 0 || discardCount > 0) && onDrawDeckCard?.()}
+          disabled={!isCurrentTurn || (deckCount === 0 && discardCount === 0)}
           data-testid="draw-deck-btn"
           title="Draw blind card from deck"
         >
