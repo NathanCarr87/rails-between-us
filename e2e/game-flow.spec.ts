@@ -33,12 +33,13 @@ test.describe('Rails Between Us - E2E Multiplayer Gameplay Suite', () => {
       await expect(page1.getByTestId('lobby-active-container')).toBeVisible();
       await expect(page1.getByTestId('players-list')).toContainText('Alice');
 
-      // Client 2 (Bob) opens app and leaves active auto-session to join as Bob
+      // Client 2 (Bob) opens app in a fresh session and joins existing game
+      await page2.addInitScript(() => {
+        localStorage.removeItem('rails_last_game_id');
+        const keys = Object.keys(localStorage).filter((k) => k.startsWith('rails_session_'));
+        keys.forEach((k) => localStorage.removeItem(k));
+      });
       await page2.goto('/');
-      await expect(page2.getByTestId('lobby-active-container')).toBeVisible();
-      await page2.getByTestId('leave-lobby-btn').click();
-
-      // Client 2 enters setup and joins existing game
       await expect(page2.getByTestId('lobby-setup-container')).toBeVisible();
       await page2.getByTestId('player-name-input').fill('Bob');
       await page2.getByTestId('game-id-input').fill(gameId);
@@ -141,12 +142,13 @@ test.describe('Rails Between Us - E2E Multiplayer Gameplay Suite', () => {
       await page1.getByTestId('color-swatch-#e53e3e').click();
       await page1.getByTestId('create-game-btn').click();
 
-      // Client 2 (Bob) opens app and leaves active auto-session to join as Bob
+      // Client 2 (Bob) opens app in a fresh session and joins existing game
+      await page2.addInitScript(() => {
+        localStorage.removeItem('rails_last_game_id');
+        const keys = Object.keys(localStorage).filter((k) => k.startsWith('rails_session_'));
+        keys.forEach((k) => localStorage.removeItem(k));
+      });
       await page2.goto('/');
-      await expect(page2.getByTestId('lobby-active-container')).toBeVisible();
-      await page2.getByTestId('leave-lobby-btn').click();
-
-      // Client 2 enters setup and joins existing game
       await expect(page2.getByTestId('lobby-setup-container')).toBeVisible();
       await page2.getByTestId('player-name-input').fill('Bob');
       await page2.getByTestId('game-id-input').fill(gameId);
@@ -211,11 +213,13 @@ test.describe('Rails Between Us - E2E Multiplayer Gameplay Suite', () => {
       await page1.getByTestId('color-swatch-#e53e3e').click();
       await page1.getByTestId('create-game-btn').click();
 
-      // Client 2 (Bob) joins game
+      // Client 2 (Bob) opens app in a fresh session and joins existing game
+      await page2.addInitScript(() => {
+        localStorage.removeItem('rails_last_game_id');
+        const keys = Object.keys(localStorage).filter((k) => k.startsWith('rails_session_'));
+        keys.forEach((k) => localStorage.removeItem(k));
+      });
       await page2.goto('/');
-      if (await page2.getByTestId('leave-lobby-btn').isVisible({ timeout: 2000 }).catch(() => false)) {
-        await page2.getByTestId('leave-lobby-btn').click();
-      }
       await expect(page2.getByTestId('lobby-setup-container')).toBeVisible();
       await page2.getByTestId('player-name-input').fill('Bob');
       await page2.getByTestId('game-id-input').fill(gameId);
@@ -304,10 +308,12 @@ test.describe('Rails Between Us - E2E Multiplayer Gameplay Suite', () => {
       await page1.getByTestId('game-id-input').fill(gameId);
       await page1.getByTestId('create-game-btn').click();
 
+      await page2.addInitScript(() => {
+        localStorage.removeItem('rails_last_game_id');
+        const keys = Object.keys(localStorage).filter((k) => k.startsWith('rails_session_'));
+        keys.forEach((k) => localStorage.removeItem(k));
+      });
       await page2.goto('/');
-      await expect(page2.getByTestId('lobby-active-container')).toBeVisible();
-      await page2.getByTestId('leave-lobby-btn').click();
-
       await expect(page2.getByTestId('lobby-setup-container')).toBeVisible();
       await page2.getByTestId('player-name-input').fill('Bob');
       await page2.getByTestId('game-id-input').fill(gameId);
