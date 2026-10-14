@@ -417,6 +417,7 @@ export function advanceTurn(game: Game): Game {
     if (activePlayer && activePlayer.trainsRemaining <= 2) {
       isFinalRound = true;
       finalRoundTriggeredBy = game.currentPlayerId;
+      console.log(`[advanceTurn] Final round triggered by ${activePlayer.displayName} (${game.currentPlayerId})! Trains remaining: ${activePlayer.trainsRemaining}`);
     }
   }
 

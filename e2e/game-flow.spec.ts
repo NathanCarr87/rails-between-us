@@ -33,7 +33,7 @@ test.describe('Rails Between Us - E2E Multiplayer Gameplay Suite', () => {
       await expect(page1.getByTestId('lobby-active-container')).toBeVisible();
       await expect(page1.getByTestId('players-list')).toContainText('Alice');
 
-      // Client 2 (Bob) opens app in a fresh session and joins existing game
+      // Client 2 (Bob) opens in a fresh session and joins existing game
       await page2.addInitScript(() => {
         localStorage.removeItem('rails_last_game_id');
         const keys = Object.keys(localStorage).filter((k) => k.startsWith('rails_session_'));
@@ -134,6 +134,9 @@ test.describe('Rails Between Us - E2E Multiplayer Gameplay Suite', () => {
     const page1 = await context.newPage();
     const page2 = await context.newPage();
 
+    page1.on('console', (msg) => process.stdout.write(`[PAGE 1 LOG]: ${msg.text()}\n`));
+    page2.on('console', (msg) => process.stdout.write(`[PAGE 2 LOG]: ${msg.text()}\n`));
+
     try {
       // Client 1 (Alice) creates game
       await page1.goto('/');
@@ -141,8 +144,9 @@ test.describe('Rails Between Us - E2E Multiplayer Gameplay Suite', () => {
       await page1.getByTestId('game-id-input').fill(gameId);
       await page1.getByTestId('color-swatch-#e53e3e').click();
       await page1.getByTestId('create-game-btn').click();
+      await expect(page1.getByTestId('lobby-active-container')).toBeVisible();
 
-      // Client 2 (Bob) opens app in a fresh session and joins existing game
+      // Client 2 (Bob) opens in a fresh session and joins existing game
       await page2.addInitScript(() => {
         localStorage.removeItem('rails_last_game_id');
         const keys = Object.keys(localStorage).filter((k) => k.startsWith('rails_session_'));
@@ -156,6 +160,8 @@ test.describe('Rails Between Us - E2E Multiplayer Gameplay Suite', () => {
       await page2.getByTestId('join-game-btn').click();
 
       // Verify both clients in lobby
+      await expect(page1.getByTestId('lobby-active-container')).toBeVisible();
+      await expect(page2.getByTestId('lobby-active-container')).toBeVisible();
       await expect(page1.getByTestId('players-list')).toContainText('Alice');
       await expect(page1.getByTestId('players-list')).toContainText('Bob');
 
@@ -205,6 +211,9 @@ test.describe('Rails Between Us - E2E Multiplayer Gameplay Suite', () => {
     const page1 = await context.newPage();
     const page2 = await context.newPage();
 
+    page1.on('console', (msg) => process.stdout.write(`[TEST 5 PAGE 1]: ${msg.text()}\n`));
+    page2.on('console', (msg) => process.stdout.write(`[TEST 5 PAGE 2]: ${msg.text()}\n`));
+
     try {
       // Client 1 (Alice) creates game
       await page1.goto('/');
@@ -212,8 +221,9 @@ test.describe('Rails Between Us - E2E Multiplayer Gameplay Suite', () => {
       await page1.getByTestId('game-id-input').fill(gameId);
       await page1.getByTestId('color-swatch-#e53e3e').click();
       await page1.getByTestId('create-game-btn').click();
+      await expect(page1.getByTestId('lobby-active-container')).toBeVisible();
 
-      // Client 2 (Bob) opens app in a fresh session and joins existing game
+      // Client 2 (Bob) opens in a fresh session and joins existing game
       await page2.addInitScript(() => {
         localStorage.removeItem('rails_last_game_id');
         const keys = Object.keys(localStorage).filter((k) => k.startsWith('rails_session_'));
@@ -226,14 +236,25 @@ test.describe('Rails Between Us - E2E Multiplayer Gameplay Suite', () => {
       await page2.getByTestId('color-swatch-#3182ce').click();
       await page2.getByTestId('join-game-btn').click();
 
+      // Verify both clients in lobby
+      await expect(page1.getByTestId('lobby-active-container')).toBeVisible();
+      await expect(page2.getByTestId('lobby-active-container')).toBeVisible();
+
       // Start game
       await page1.getByTestId('start-game-btn').click();
       await expect(page1.getByTestId('in-game-container')).toBeVisible();
       await expect(page2.getByTestId('in-game-container')).toBeVisible();
 
       // Both players confirm initial tickets
+      const modal1 = page1.getByTestId('destination-ticket-modal');
+      const modal2 = page2.getByTestId('destination-ticket-modal');
+      await expect(modal1).toBeVisible();
       await page1.getByTestId('confirm-tickets-btn').click();
+      await expect(modal1).toBeHidden();
+
+      await expect(modal2).toBeVisible();
       await page2.getByTestId('confirm-tickets-btn').click();
+      await expect(modal2).toBeHidden();
 
       // Determine starting active player
       const activePlayerName = (await page1.getByTestId('current-player-name').textContent())?.trim();
@@ -243,27 +264,26 @@ test.describe('Rails Between Us - E2E Multiplayer Gameplay Suite', () => {
 
       // Simulate active player having 2 remaining trains in game state to trigger final round
       await activePage.evaluate(async (gid) => {
-        const key = `rails_game_${gid}`;
-        const data = localStorage.getItem(key);
-        if (data) {
-          const game = JSON.parse(data);
-          const activePid = game.currentPlayerId;
-          if (activePid && game.players[activePid]) {
-            game.players[activePid].trainsRemaining = 2;
-            const forceUpdate = (window as unknown as Record<string, (g: unknown) => Promise<unknown>>).__FORCE_UPDATE_GAME__;
-            if (forceUpdate) {
-              await forceUpdate(game);
-            } else {
-              localStorage.setItem(key, JSON.stringify(game));
-              window.dispatchEvent(new StorageEvent('storage', { key, newValue: JSON.stringify(game) }));
-            }
-          }
+        const updateFn = (window as unknown as { __UPDATE_GAME__?: (id: string, fn: (game: any) => any) => Promise<any> }).__UPDATE_GAME__;
+        if (updateFn) {
+          await updateFn(gid, (g) => {
+            const nextPlayers = { ...g.players };
+            Object.keys(nextPlayers).forEach((pid) => {
+              nextPlayers[pid] = { ...nextPlayers[pid], trainsRemaining: 2 };
+            });
+            return { ...g, players: nextPlayers };
+          });
         }
       }, gameId);
 
+      // Wait for UI to re-render reflecting 2 trains remaining
+      await expect(activePage.locator('div', { hasText: 'Trains:' }).first()).toContainText('2');
+
       // Active player takes their turn (draws 2 cards), which triggers final round
       await activePage.getByTestId('draw-deck-btn').click();
+      await expect(activePage.getByTestId('player-hand')).toContainText('Your Hand (5 cards)');
       await activePage.getByTestId('draw-deck-btn').click();
+      await expect(activePage.getByTestId('player-hand')).toContainText('Your Hand (6 cards)');
 
       // Verify final round banner is displayed on BOTH clients
       await expect(page1.getByTestId('final-round-banner')).toBeVisible();
@@ -271,10 +291,13 @@ test.describe('Rails Between Us - E2E Multiplayer Gameplay Suite', () => {
 
       // Inactive player takes their final turn
       await inactivePage.getByTestId('draw-deck-btn').click();
+      await expect(inactivePage.getByTestId('player-hand')).toContainText('Your Hand (5 cards)');
       await inactivePage.getByTestId('draw-deck-btn').click();
+      await expect(inactivePage.getByTestId('player-hand')).toContainText('Your Hand (6 cards)');
 
       // Active player takes their final turn to complete the final round
       await activePage.getByTestId('draw-deck-btn').click();
+      await expect(activePage.getByTestId('player-hand')).toContainText('Your Hand (7 cards)');
       await activePage.getByTestId('draw-deck-btn').click();
 
       // Game is now finished. Verify finished scoreboard appears on BOTH clients
@@ -307,6 +330,7 @@ test.describe('Rails Between Us - E2E Multiplayer Gameplay Suite', () => {
       await page1.getByTestId('player-name-input').fill('Alice');
       await page1.getByTestId('game-id-input').fill(gameId);
       await page1.getByTestId('create-game-btn').click();
+      await expect(page1.getByTestId('lobby-active-container')).toBeVisible();
 
       await page2.addInitScript(() => {
         localStorage.removeItem('rails_last_game_id');
@@ -320,6 +344,8 @@ test.describe('Rails Between Us - E2E Multiplayer Gameplay Suite', () => {
       await page2.getByTestId('color-swatch-#3182ce').click();
       await page2.getByTestId('join-game-btn').click();
 
+      await expect(page1.getByTestId('lobby-active-container')).toBeVisible();
+      await expect(page2.getByTestId('lobby-active-container')).toBeVisible();
       await expect(page1.getByTestId('players-list')).toContainText('Alice');
       await expect(page1.getByTestId('players-list')).toContainText('Bob');
 
@@ -327,28 +353,35 @@ test.describe('Rails Between Us - E2E Multiplayer Gameplay Suite', () => {
       await expect(page1.getByTestId('in-game-container')).toBeVisible();
       await expect(page2.getByTestId('in-game-container')).toBeVisible();
 
+      const modal1 = page1.getByTestId('destination-ticket-modal');
+      const modal2 = page2.getByTestId('destination-ticket-modal');
+      await expect(modal1).toBeVisible();
       await page1.getByTestId('confirm-tickets-btn').click();
+      await expect(modal1).toBeHidden();
+
+      await expect(modal2).toBeVisible();
       await page2.getByTestId('confirm-tickets-btn').click();
+      await expect(modal2).toBeHidden();
+
+      await expect(page1.getByTestId('player-tickets-section')).toContainText('Your Destination Tickets (3)');
+      await expect(page2.getByTestId('player-tickets-section')).toContainText('Your Destination Tickets (3)');
 
       const activePlayerName = (await page1.getByTestId('current-player-name').textContent())?.trim();
       const activePage = activePlayerName === 'Alice' ? page1 : page2;
 
       // Manipulate game state to set destinationTicketDeck length to exactly 2 tickets
       await activePage.evaluate(async (gid) => {
-        const key = `rails_game_${gid}`;
-        const data = localStorage.getItem(key);
-        if (data) {
-          const game = JSON.parse(data);
-          game.destinationTicketDeck = game.destinationTicketDeck.slice(0, 2);
-          const forceUpdate = (window as unknown as Record<string, (g: unknown) => Promise<unknown>>).__FORCE_UPDATE_GAME__;
-          if (forceUpdate) {
-            await forceUpdate(game);
-          } else {
-            localStorage.setItem(key, JSON.stringify(game));
-            window.dispatchEvent(new StorageEvent('storage', { key, newValue: JSON.stringify(game) }));
-          }
+        const updateFn = (window as unknown as { __UPDATE_GAME__?: (id: string, fn: (game: any) => any) => Promise<any> }).__UPDATE_GAME__;
+        if (updateFn) {
+          await updateFn(gid, (g) => ({
+            ...g,
+            destinationTicketDeck: g.destinationTicketDeck.slice(0, 2),
+          }));
         }
       }, gameId);
+
+      // Wait for UI to re-render reflecting 2 tickets in ticket deck
+      await expect(activePage.locator('div', { hasText: 'Ticket Deck:' }).first()).toContainText('2 tickets');
 
       // Active player draws destination tickets when only 2 remain in deck
       await activePage.getByTestId('draw-tickets-btn').click();
@@ -387,12 +420,14 @@ test.describe('Rails Between Us - E2E Multiplayer Gameplay Suite', () => {
     await page.getByTestId('create-game-btn').click();
     await expect(page.getByTestId('lobby-active-container')).toBeVisible();
 
-    // Create a finished game state in localStorage where Alice and Bob tie on total score (50 pts),
+    // Create a finished game state where Alice and Bob tie on total score (24 pts),
     // but Bob completed 2 tickets vs Alice 1 ticket.
     await page.evaluate(async (gid) => {
       const key = `rails_game_${gid}`;
       const existing = localStorage.getItem(key);
       const baseGame = existing ? JSON.parse(existing) : {};
+      const alicePid = baseGame.playerOrder?.[0] || 'p1';
+      const bobPid = 'p2';
 
       const finishedGame = {
         ...baseGame,
@@ -401,47 +436,47 @@ test.describe('Rails Between Us - E2E Multiplayer Gameplay Suite', () => {
         status: 'completed',
         currentPlayerId: null,
         turnNumber: 10,
-        playerOrder: ['p1', 'p2'],
+        playerOrder: [alicePid, bobPid],
         players: {
-          p1: {
-            playerId: 'p1',
+          [alicePid]: {
+            playerId: alicePid,
             displayName: 'Alice',
             color: '#e53e3e',
             ready: true,
             trainCards: [],
             destinationTickets: [{ id: 't1', cityA: 'boston', cityB: 'new_york', points: 10 }],
-            claimedRoutes: [],
+            claimedRoutes: ['route_boston_new_york_red', 'route_boston_montreal_any_1'],
             trainsRemaining: 0,
-            score: 50,
+            score: 24,
             scoreBreakdown: {
-              routePoints: 40,
+              routePoints: 4,
               destinationTicketPoints: 10,
               completedTicketsCount: 1,
-              longestPathLength: 10,
-              longestPathBonus: 0,
-              finalScore: 50,
+              longestPathLength: 4,
+              longestPathBonus: 10,
+              finalScore: 24,
             },
           },
-          p2: {
-            playerId: 'p2',
+          [bobPid]: {
+            playerId: bobPid,
             displayName: 'Bob',
             color: '#3182ce',
             ready: true,
             trainCards: [],
             destinationTickets: [
-              { id: 't2', cityA: 'chicago', cityB: 'st_louis', points: 10 },
-              { id: 't3', cityA: 'denver', cityB: 'helena', points: 10 },
+              { id: 't2', cityA: 'new_york', cityB: 'washington', points: 5 },
+              { id: 't3', cityA: 'washington', cityB: 'raleigh', points: 5 },
             ],
-            claimedRoutes: [],
+            claimedRoutes: ['route_new_york_washington_orange', 'route_raleigh_washington_any_1'],
             trainsRemaining: 0,
-            score: 50,
+            score: 24,
             scoreBreakdown: {
-              routePoints: 30,
-              destinationTicketPoints: 20,
+              routePoints: 4,
+              destinationTicketPoints: 10,
               completedTicketsCount: 2,
-              longestPathLength: 8,
-              longestPathBonus: 0,
-              finalScore: 50,
+              longestPathLength: 4,
+              longestPathBonus: 10,
+              finalScore: 24,
             },
           },
         },
@@ -455,9 +490,9 @@ test.describe('Rails Between Us - E2E Multiplayer Gameplay Suite', () => {
         updatedAt: Date.now(),
       };
 
-      const forceUpdate = (window as unknown as Record<string, (g: unknown) => Promise<unknown>>).__FORCE_UPDATE_GAME__;
-      if (forceUpdate) {
-        await forceUpdate(finishedGame);
+      const updateFn = (window as unknown as { __UPDATE_GAME__?: (id: string, fn: (game: any) => any) => Promise<any> }).__UPDATE_GAME__;
+      if (updateFn) {
+        await updateFn(gid, () => finishedGame);
       } else {
         localStorage.setItem(key, JSON.stringify(finishedGame));
         window.dispatchEvent(new StorageEvent('storage', { key, newValue: JSON.stringify(finishedGame) }));
@@ -465,7 +500,7 @@ test.describe('Rails Between Us - E2E Multiplayer Gameplay Suite', () => {
     }, gameId);
 
     await expect(page.getByTestId('finished-game-scoreboard')).toBeVisible();
-    await expect(page.getByTestId('winner-announcement')).toContainText('Bob wins with 50 points!');
+    await expect(page.getByTestId('winner-announcement')).toContainText('Bob wins with 24 points!');
 
     // First row in table should be Bob (#1 rank)
     const firstRow = page.locator('tr[data-testid^="player-score-row-"]').first();
@@ -487,6 +522,8 @@ test.describe('Rails Between Us - E2E Multiplayer Gameplay Suite', () => {
       const key = `rails_game_${gid}`;
       const existing = localStorage.getItem(key);
       const baseGame = existing ? JSON.parse(existing) : {};
+      const alicePid = baseGame.playerOrder?.[0] || 'p1';
+      const bobPid = 'p2';
 
       const finishedGame = {
         ...baseGame,
@@ -495,10 +532,10 @@ test.describe('Rails Between Us - E2E Multiplayer Gameplay Suite', () => {
         status: 'completed',
         currentPlayerId: null,
         turnNumber: 12,
-        playerOrder: ['p1', 'p2'],
+        playerOrder: [alicePid, bobPid],
         players: {
-          p1: {
-            playerId: 'p1',
+          [alicePid]: {
+            playerId: alicePid,
             displayName: 'Alice',
             color: '#e53e3e',
             ready: true,
@@ -516,8 +553,8 @@ test.describe('Rails Between Us - E2E Multiplayer Gameplay Suite', () => {
               finalScore: 60,
             },
           },
-          p2: {
-            playerId: 'p2',
+          [bobPid]: {
+            playerId: bobPid,
             displayName: 'Bob',
             color: '#3182ce',
             ready: true,
@@ -546,9 +583,9 @@ test.describe('Rails Between Us - E2E Multiplayer Gameplay Suite', () => {
         updatedAt: Date.now(),
       };
 
-      const forceUpdate = (window as unknown as Record<string, (g: unknown) => Promise<unknown>>).__FORCE_UPDATE_GAME__;
-      if (forceUpdate) {
-        await forceUpdate(finishedGame);
+      const updateFn = (window as unknown as { __UPDATE_GAME__?: (id: string, fn: (game: any) => any) => Promise<any> }).__UPDATE_GAME__;
+      if (updateFn) {
+        await updateFn(gid, () => finishedGame);
       } else {
         localStorage.setItem(key, JSON.stringify(finishedGame));
         window.dispatchEvent(new StorageEvent('storage', { key, newValue: JSON.stringify(finishedGame) }));
