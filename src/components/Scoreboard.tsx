@@ -1,6 +1,6 @@
 import React from 'react';
 import type { Game } from '../game/model/types';
-import { isTicketCompleted } from '../game/state/gameEngine';
+import { comparePlayersForWinner, isTicketCompleted } from '../game/state/gameEngine';
 
 export interface ScoreboardProps {
   game: Game;
@@ -11,7 +11,7 @@ export const Scoreboard: React.FC<ScoreboardProps> = ({ game, onLeaveGame }) => 
   const sortedPlayers = [...game.playerOrder]
     .map((pid) => game.players[pid])
     .filter((p): p is NonNullable<typeof p> => Boolean(p))
-    .sort((a, b) => b.score - a.score);
+    .sort(comparePlayersForWinner);
 
   const winner = sortedPlayers[0];
 

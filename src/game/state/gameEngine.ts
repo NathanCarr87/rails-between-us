@@ -217,7 +217,7 @@ export function startGame(game: Game): Game {
       ...p,
       trainCards,
       pendingDestinationTickets: pendingTickets,
-      pendingTicketsMinKeep: 2,
+      pendingTicketsMinKeep: Math.min(2, pendingTickets.length),
       pendingTicketsFromTurn: false,
       destinationTickets: p.destinationTickets ?? [],
     };
@@ -348,6 +348,13 @@ export function calculateFinalGameScores(game: Game): Record<string, Player> {
       routes
     );
 
+    let completedTicketsCount = 0;
+    for (const ticket of p.destinationTickets) {
+      if (isTicketCompleted(ticket, p.claimedRoutes, routes)) {
+        completedTicketsCount++;
+      }
+    }
+
     const longestPathInfo = longestPathResults[pid] || { length: 0, bonus: 0 };
 
     const finalScore = routePoints + destinationTicketPoints + longestPathInfo.bonus;
@@ -358,6 +365,7 @@ export function calculateFinalGameScores(game: Game): Record<string, Player> {
       scoreBreakdown: {
         routePoints,
         destinationTicketPoints,
+        completedTicketsCount,
         longestPathLength: longestPathInfo.length,
         longestPathBonus: longestPathInfo.bonus,
         finalScore,
@@ -366,6 +374,32 @@ export function calculateFinalGameScores(game: Game): Record<string, Player> {
   }
 
   return updatedPlayers;
+}
+
+/**
+ * Compares two players to determine winner order according to official tie-breaker rules:
+ * 1. Total score (highest)
+ * 2. Completed Destination Tickets count (highest)
+ * 3. Longest Continuous Path length (highest)
+ */
+export function comparePlayersForWinner(a: Player, b: Player): number {
+  if (b.score !== a.score) {
+    return b.score - a.score;
+  }
+
+  const aCompleted = a.scoreBreakdown?.completedTicketsCount ?? 0;
+  const bCompleted = b.scoreBreakdown?.completedTicketsCount ?? 0;
+  if (bCompleted !== aCompleted) {
+    return bCompleted - aCompleted;
+  }
+
+  const aLongest = a.scoreBreakdown?.longestPathLength ?? 0;
+  const bLongest = b.scoreBreakdown?.longestPathLength ?? 0;
+  if (bLongest !== aLongest) {
+    return bLongest - aLongest;
+  }
+
+  return 0;
 }
 
 export function advanceTurn(game: Game): Game {
@@ -973,6 +1007,10 @@ export function executeDrawDestinationTicketsTurn(
     throw new Error('Cannot draw destination tickets after drawing train cards this turn.');
   }
 
+  if (game.destinationTicketDeck.length === 0) {
+    throw new Error('No destination tickets remaining in deck.');
+  }
+
   const { game: updatedGame, drawnTickets } = drawDestinationTickets(game, playerId, count);
   const player = updatedGame.players[playerId];
 
@@ -984,7 +1022,7 @@ export function executeDrawDestinationTicketsTurn(
         [playerId]: {
           ...player,
           pendingDestinationTickets: drawnTickets,
-          pendingTicketsMinKeep: 1,
+          pendingTicketsMinKeep: Math.min(1, drawnTickets.length),
           pendingTicketsFromTurn: true,
         },
       },
@@ -994,7 +1032,7 @@ export function executeDrawDestinationTicketsTurn(
     const updatedPlayer: Player = {
       ...player,
       pendingDestinationTickets: [...(player.pendingDestinationTickets || []), ...drawnTickets],
-      pendingTicketsMinKeep: 1,
+      pendingTicketsMinKeep: Math.min(1, drawnTickets.length),
       pendingTicketsFromTurn: true,
     };
 
