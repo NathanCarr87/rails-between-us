@@ -82,12 +82,7 @@ export const DevGameView: React.FC = () => {
     setErrorMessage(null);
     try {
       const existingSession = getPlayerSession(gameId);
-      let pid: string;
-      if (existingSession && existingSession.playerName === playerName) {
-        pid = existingSession.playerId;
-      } else {
-        pid = `p_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
-      }
+      const pid = existingSession?.playerId || `p_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
 
       const updatedGame = await joinGameInFirestore(gameId, {
         playerId: pid,
