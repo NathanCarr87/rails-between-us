@@ -6,19 +6,14 @@ export interface PlayerStatusProps {
   localPlayerId?: string;
   onDrawCards?: (playerId: string) => void;
   onDrawDestinationTickets?: (playerId: string) => void;
+  section?: 'all' | 'tracker' | 'summaries';
 }
 
-export const PlayerStatus: React.FC<PlayerStatusProps> = ({
-  game,
-  localPlayerId,
-  onDrawCards,
-  onDrawDestinationTickets,
-}) => {
+export const TurnTracker: React.FC<{ game: Game }> = ({ game }) => {
   const currentPlayer = game.currentPlayerId ? game.players[game.currentPlayerId] : null;
-  const isLocalTurn = localPlayerId && localPlayerId === game.currentPlayerId;
 
   return (
-    <div style={styles.container} data-testid="player-status-container">
+    <div style={styles.trackerContainer} data-testid="turn-tracker-container">
       {/* Final Round Banner */}
       {game.isFinalRound && game.phase === 'playing' && (
         <div style={styles.finalRoundBanner} data-testid="final-round-banner">
@@ -26,33 +21,45 @@ export const PlayerStatus: React.FC<PlayerStatusProps> = ({
         </div>
       )}
 
-      {/* Game Header Status Bar */}
+      {/* Compact Turn Tracker Bar */}
       <div style={styles.headerBar}>
         <div style={styles.statusItem}>
-          <span style={styles.label}>Game Status:</span>
+          <span style={styles.label}>Status:</span>
           <span style={styles.badge} data-testid="game-status-badge">{game.status}</span>
         </div>
         <div style={styles.statusItem}>
           <span style={styles.label}>Turn:</span>
-          <strong>#{game.turnNumber}</strong>
+          <strong style={styles.val}>#{game.turnNumber}</strong>
         </div>
         <div style={styles.statusItem}>
-          <span style={styles.label}>Current Turn:</span>
+          <span style={styles.label}>Turn Active:</span>
           <span style={styles.currentPlayerName} data-testid="current-player-name">
             {currentPlayer ? currentPlayer.displayName : 'None'}
           </span>
         </div>
         <div style={styles.statusItem}>
           <span style={styles.label}>Train Deck:</span>
-          <span>{game.trainCardDeck.length} cards</span>
+          <span style={styles.val}>{game.trainCardDeck.length} cards</span>
         </div>
         <div style={styles.statusItem}>
           <span style={styles.label}>Ticket Deck:</span>
-          <span>{game.destinationTicketDeck.length} tickets</span>
+          <span style={styles.val}>{game.destinationTicketDeck.length} tickets</span>
         </div>
       </div>
+    </div>
+  );
+};
 
-      {/* Players List Grid */}
+export const PlayerSummaries: React.FC<{
+  game: Game;
+  localPlayerId?: string;
+  onDrawCards?: (playerId: string) => void;
+  onDrawDestinationTickets?: (playerId: string) => void;
+}> = ({ game, localPlayerId, onDrawCards, onDrawDestinationTickets }) => {
+  const isLocalTurn = localPlayerId && localPlayerId === game.currentPlayerId;
+
+  return (
+    <div style={styles.playerSummariesWrapper} data-testid="player-summaries-container">
       <div style={styles.playerGrid}>
         {game.playerOrder.map((pid) => {
           const player = game.players[pid];
@@ -62,23 +69,41 @@ export const PlayerStatus: React.FC<PlayerStatusProps> = ({
             <div
               key={pid}
               style={{
-                ...styles.playerCard,
-                borderColor: player.color,
+                ...styles.summaryCard,
+                borderColor: isCurrent ? player.color : '#e2e8f0',
                 backgroundColor: isCurrent ? '#f0fff4' : '#ffffff',
+                boxShadow: isCurrent ? `0 0 0 2px ${player.color}40, 0 1px 3px rgba(0,0,0,0.08)` : '0 1px 2px rgba(0,0,0,0.04)',
               }}
+              data-testid={`player-summary-${pid}`}
             >
-              <div style={styles.playerHeader}>
-                <span style={{ ...styles.colorDot, backgroundColor: player.color }} />
-                <span style={styles.playerName}>{player.displayName}</span>
-                {isCurrent && <span style={styles.turnBadge}>Active</span>}
+              <div style={styles.cardHeader}>
+                <div style={styles.playerIdentity}>
+                  <span style={{ ...styles.colorDot, backgroundColor: player.color }} />
+                  <span style={styles.playerName}>
+                    {player.displayName}
+                    {pid === localPlayerId ? ' (You)' : ''}
+                  </span>
+                </div>
+                {isCurrent && <span style={{ ...styles.turnBadge, backgroundColor: player.color }}>Active Turn</span>}
               </div>
 
-              <div style={styles.statsRow}>
-                <div>Score: <strong>{player.score}</strong></div>
-                <div>Trains: <strong>{player.trainsRemaining}</strong></div>
-                <div>Cards: <strong>{player.trainCards.length}</strong></div>
-                <div>Tickets: <strong>{player.destinationTickets?.length ?? 0}</strong></div>
-                <div>Routes: <strong>{player.claimedRoutes.length}</strong></div>
+              <div style={styles.compactStatsGrid}>
+                <div style={styles.statItem} title="Score">
+                  <span style={styles.statLabel}>Score:</span>
+                  <span style={styles.statVal}>{player.score}</span>
+                </div>
+                <div style={styles.statItem} title="Trains remaining">
+                  <span style={styles.statLabel}>Trains:</span>
+                  <span style={styles.statVal}>{player.trainsRemaining}</span>
+                </div>
+                <div style={styles.statItem} title="Train cards in hand">
+                  <span style={styles.statLabel}>Cards:</span>
+                  <span style={styles.statVal}>{player.trainCards.length}</span>
+                </div>
+                <div style={styles.statItem} title="Destination tickets">
+                  <span style={styles.statLabel}>Tickets:</span>
+                  <span style={styles.statVal}>{player.destinationTickets?.length ?? 0}</span>
+                </div>
               </div>
 
               {pid === localPlayerId && (onDrawCards || onDrawDestinationTickets) && (
@@ -86,7 +111,7 @@ export const PlayerStatus: React.FC<PlayerStatusProps> = ({
                   {onDrawCards && (
                     <button
                       style={{
-                        ...styles.btnDraw,
+                        ...styles.btnDrawCompact,
                         opacity: isCurrent && isLocalTurn ? 1 : 0.5,
                         cursor: isCurrent && isLocalTurn ? 'pointer' : 'not-allowed',
                       }}
@@ -99,7 +124,7 @@ export const PlayerStatus: React.FC<PlayerStatusProps> = ({
                   {onDrawDestinationTickets && (
                     <button
                       style={{
-                        ...styles.btnDraw,
+                        ...styles.btnDrawCompact,
                         opacity: isCurrent && isLocalTurn ? 1 : 0.5,
                         cursor: isCurrent && isLocalTurn ? 'pointer' : 'not-allowed',
                       }}
@@ -120,53 +145,105 @@ export const PlayerStatus: React.FC<PlayerStatusProps> = ({
   );
 };
 
+export const PlayerStatus: React.FC<PlayerStatusProps> = ({
+  game,
+  localPlayerId,
+  onDrawCards,
+  onDrawDestinationTickets,
+  section = 'all',
+}) => {
+  if (section === 'tracker') {
+    return <TurnTracker game={game} />;
+  }
+
+  if (section === 'summaries') {
+    return (
+      <PlayerSummaries
+        game={game}
+        localPlayerId={localPlayerId}
+        onDrawCards={onDrawCards}
+        onDrawDestinationTickets={onDrawDestinationTickets}
+      />
+    );
+  }
+
+  return (
+    <div style={styles.container} data-testid="player-status-container">
+      <TurnTracker game={game} />
+      <PlayerSummaries
+        game={game}
+        localPlayerId={localPlayerId}
+        onDrawCards={onDrawCards}
+        onDrawDestinationTickets={onDrawDestinationTickets}
+      />
+    </div>
+  );
+};
+
 const styles: Record<string, React.CSSProperties> = {
   container: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '12px',
+    gap: '10px',
+    width: '100%',
+    boxSizing: 'border-box',
+  },
+  trackerContainer: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '6px',
+    width: '100%',
+    boxSizing: 'border-box',
+  },
+  playerSummariesWrapper: {
     width: '100%',
     boxSizing: 'border-box',
   },
   headerBar: {
     display: 'flex',
     flexWrap: 'wrap',
-    gap: '12px',
+    gap: '10px 16px',
     alignItems: 'center',
     justifyContent: 'space-between',
     backgroundColor: '#ffffff',
-    padding: '12px 16px',
-    borderRadius: '10px',
-    boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-    fontSize: '14px',
+    padding: '8px 14px',
+    borderRadius: '8px',
+    boxShadow: '0 1px 2px rgba(0,0,0,0.06)',
+    fontSize: '13px',
+    border: '1px solid #e2e8f0',
   },
   statusItem: {
     display: 'flex',
     alignItems: 'center',
-    gap: '6px',
+    gap: '5px',
   },
   finalRoundBanner: {
     backgroundColor: '#feebc8',
     color: '#744210',
-    border: '2px solid #f6ad55',
-    padding: '10px 16px',
+    border: '1px solid #f6ad55',
+    padding: '6px 12px',
     borderRadius: '8px',
-    fontSize: '15px',
+    fontSize: '13px',
     textAlign: 'center',
     fontWeight: '500',
   },
   label: {
     color: '#718096',
     fontWeight: '500',
+    fontSize: '12px',
+  },
+  val: {
+    color: '#2d3748',
+    fontSize: '13px',
   },
   badge: {
     textTransform: 'uppercase',
-    fontSize: '11px',
+    fontSize: '10px',
     fontWeight: 'bold',
-    backgroundColor: '#e2e8f0',
+    backgroundColor: '#edf2f7',
     color: '#2d3748',
-    padding: '2px 8px',
-    borderRadius: '12px',
+    padding: '2px 6px',
+    borderRadius: '8px',
   },
   currentPlayerName: {
     fontWeight: 'bold',
@@ -174,59 +251,87 @@ const styles: Record<string, React.CSSProperties> = {
   },
   playerGrid: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-    gap: '12px',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+    gap: '8px',
   },
-  playerCard: {
-    borderRadius: '10px',
-    border: '2px solid',
-    padding: '12px',
-    boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+  summaryCard: {
+    borderRadius: '8px',
+    border: '1.5px solid',
+    padding: '8px 12px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '6px',
+    transition: 'all 0.15s ease-in-out',
   },
-  playerHeader: {
+  cardHeader: {
     display: 'flex',
     alignItems: 'center',
-    gap: '8px',
-    marginBottom: '8px',
+    justifyContent: 'space-between',
+    gap: '6px',
+  },
+  playerIdentity: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    minWidth: 0,
   },
   colorDot: {
-    width: '12px',
-    height: '12px',
+    width: '10px',
+    height: '10px',
     borderRadius: '50%',
     flexShrink: 0,
   },
   playerName: {
     fontWeight: 'bold',
-    fontSize: '15px',
-    flexGrow: 1,
+    fontSize: '13px',
+    color: '#1a202c',
+    whiteSpace: 'nowrap',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
   },
   turnBadge: {
-    fontSize: '11px',
+    fontSize: '10px',
     fontWeight: 'bold',
-    backgroundColor: '#38a169',
     color: '#ffffff',
-    padding: '2px 6px',
-    borderRadius: '4px',
+    padding: '1px 6px',
+    borderRadius: '10px',
+    flexShrink: 0,
   },
-  statsRow: {
+  compactStatsGrid: {
     display: 'grid',
-    gridTemplateColumns: '1fr 1fr',
-    gap: '6px',
+    gridTemplateColumns: 'repeat(4, 1fr)',
+    gap: '4px',
+    backgroundColor: 'rgba(0,0,0,0.02)',
+    padding: '4px 6px',
+    borderRadius: '6px',
+  },
+  statItem: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+  },
+  statLabel: {
+    fontSize: '10px',
+    color: '#718096',
+    fontWeight: '500',
+    textTransform: 'uppercase',
+  },
+  statVal: {
     fontSize: '13px',
-    color: '#4a5568',
+    fontWeight: 'bold',
+    color: '#2d3748',
   },
   actions: {
-    marginTop: '10px',
     display: 'flex',
     gap: '6px',
   },
-  btnDraw: {
+  btnDrawCompact: {
     flex: 1,
-    padding: '6px 8px',
+    padding: '4px 8px',
     backgroundColor: '#edf2f7',
     border: '1px solid #cbd5e0',
     borderRadius: '6px',
-    fontSize: '12px',
+    fontSize: '11px',
     fontWeight: '600',
     cursor: 'pointer',
     color: '#2d3748',
