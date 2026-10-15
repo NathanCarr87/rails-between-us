@@ -1,12 +1,13 @@
 // @vitest-environment jsdom
 import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import { describe, expect, it, vi, afterEach } from 'vitest';
+import { PlayerHand } from '../PlayerHand';
+import type { TrainCard } from '../../game/model/types';
+import { DEFAULT_CITIES, DEFAULT_ROUTES } from '../../game/rules/defaults';
 
 afterEach(() => {
   cleanup();
 });
-import { PlayerHand } from '../PlayerHand';
-import type { TrainCard } from '../../game/model/types';
 
 describe('PlayerHand Component', () => {
   it('renders empty hand message when no cards are held', () => {
@@ -58,5 +59,27 @@ describe('PlayerHand Component', () => {
     fireEvent.click(blueBadge);
 
     expect(handleSelectColor).toHaveBeenCalledWith('blue');
+  });
+
+  it('calls onInspectTicket when a destination ticket row is clicked', () => {
+    const mockTickets = [
+      { id: 'ticket_1', cityA: 'boston', cityB: 'miami', points: 12 },
+    ];
+    const handleInspect = vi.fn();
+
+    render(
+      <PlayerHand
+        cards={[]}
+        destinationTickets={mockTickets}
+        cities={DEFAULT_CITIES}
+        routes={DEFAULT_ROUTES}
+        onInspectTicket={handleInspect}
+      />
+    );
+
+    const ticketRow = screen.getByTestId('kept-ticket-ticket_1');
+    fireEvent.click(ticketRow);
+
+    expect(handleInspect).toHaveBeenCalledWith(mockTickets[0]);
   });
 });

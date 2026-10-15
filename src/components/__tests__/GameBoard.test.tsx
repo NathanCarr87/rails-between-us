@@ -32,6 +32,104 @@ describe('GameBoard visual coordinates', () => {
   });
 });
 
+describe('GameBoard zoom controls and viewBox state', () => {
+  const sampleBoardState = {
+    cities: DEFAULT_CITIES,
+    routes: DEFAULT_ROUTES,
+  };
+
+  const samplePlayers = {
+    player_1: {
+      playerId: 'player_1',
+      displayName: 'Alice',
+      color: '#e53e3e',
+      ready: true,
+      trainCards: [],
+      destinationTickets: [],
+      claimedRoutes: [],
+      trainsRemaining: 45,
+      score: 0,
+    },
+  };
+
+  it('renders zoom controls and sets default 1.25x zoom centered viewBox', () => {
+    const { container } = render(
+      <GameBoard boardState={sampleBoardState} players={samplePlayers} />
+    );
+
+    const zoomControls = screen.getByTestId('map-zoom-controls');
+    expect(zoomControls).toBeDefined();
+
+    const zoomInBtn = screen.getByTestId('map-zoom-in');
+    const zoomOutBtn = screen.getByTestId('map-zoom-out');
+    const zoomResetBtn = screen.getByTestId('map-zoom-reset');
+
+    expect(zoomInBtn).toBeDefined();
+    expect(zoomOutBtn).toBeDefined();
+    expect(zoomResetBtn).toBeDefined();
+
+    const svg = container.querySelector('svg');
+    expect(svg).toBeDefined();
+    // Default zoom scale = 1.25 -> viewBox "100 67 800 536"
+    expect(svg?.getAttribute('viewBox')).toBe('100 67 800 536');
+  });
+
+  it('zooms in when Zoom In (+) is clicked', () => {
+    const { container } = render(
+      <GameBoard boardState={sampleBoardState} players={samplePlayers} />
+    );
+
+    const zoomInBtn = screen.getByTestId('map-zoom-in');
+    fireEvent.click(zoomInBtn);
+
+    const svg = container.querySelector('svg');
+    const viewBox = svg?.getAttribute('viewBox');
+    expect(viewBox).toBeDefined();
+
+    const [vx, vy, vw, vh] = viewBox!.split(' ').map(Number);
+    // Increased zoom scale means smaller viewBox dimensions (vw < 800, vh < 536)
+    expect(vw).toBeLessThan(800);
+    expect(vh).toBeLessThan(536);
+    expect(vx).toBeGreaterThanOrEqual(0);
+    expect(vy).toBeGreaterThanOrEqual(0);
+  });
+
+  it('zooms out when Zoom Out (−) is clicked', () => {
+    const { container } = render(
+      <GameBoard boardState={sampleBoardState} players={samplePlayers} />
+    );
+
+    const zoomOutBtn = screen.getByTestId('map-zoom-out');
+    fireEvent.click(zoomOutBtn);
+
+    const svg = container.querySelector('svg');
+    const viewBox = svg?.getAttribute('viewBox');
+    expect(viewBox).toBeDefined();
+
+    const [_vx, _vy, vw, vh] = viewBox!.split(' ').map(Number);
+    // Decreased zoom scale means larger viewBox dimensions (vw > 800, vh > 536)
+    expect(vw).toBeGreaterThan(800);
+    expect(vh).toBeGreaterThan(536);
+  });
+
+  it('resets to default 1.25x zoom when Reset is clicked after zooming', () => {
+    const { container } = render(
+      <GameBoard boardState={sampleBoardState} players={samplePlayers} />
+    );
+
+    const zoomInBtn = screen.getByTestId('map-zoom-in');
+    const zoomResetBtn = screen.getByTestId('map-zoom-reset');
+
+    fireEvent.click(zoomInBtn);
+    fireEvent.click(zoomInBtn);
+
+    fireEvent.click(zoomResetBtn);
+
+    const svg = container.querySelector('svg');
+    expect(svg?.getAttribute('viewBox')).toBe('100 67 800 536');
+  });
+});
+
 describe('GameBoard interactive route selection and claiming', () => {
   const sampleBoardState = {
     cities: DEFAULT_CITIES,

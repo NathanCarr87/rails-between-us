@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import type { CardColor, Game } from '../game/model/types';
+import type { CardColor, DestinationTicket, Game } from '../game/model/types';
 import {
   clearPlayerSession,
   createGameInFirestore,
@@ -18,6 +18,7 @@ import { PlayerStatus } from './PlayerStatus';
 import { PlayerHand } from './PlayerHand';
 import { Lobby } from './Lobby';
 import { DestinationTicketModal } from './DestinationTicketModal';
+import { DestinationTicketDetailModal } from './DestinationTicketDetailModal';
 import { FaceUpCards } from './FaceUpCards';
 import { Scoreboard } from './Scoreboard';
 
@@ -33,6 +34,7 @@ export const DevGameView: React.FC = () => {
   const [game, setGame] = useState<Game | null>(null);
   const [selectedRouteId, setSelectedRouteId] = useState<string>('');
   const [selectedCardColor, setSelectedCardColor] = useState<CardColor>('red');
+  const [inspectingTicket, setInspectingTicket] = useState<DestinationTicket | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   // Subscribe to real-time updates whenever activeGameId changes
@@ -138,6 +140,7 @@ export const DevGameView: React.FC = () => {
     setActiveGameId('');
     setLocalPlayerId('');
     setSelectedRouteId('');
+    setInspectingTicket(null);
     setErrorMessage(null);
   };
 
@@ -408,6 +411,17 @@ export const DevGameView: React.FC = () => {
           />
         )}
 
+      {/* Detailed Destination Ticket Inspection Modal */}
+      {inspectingTicket && game && (
+        <DestinationTicketDetailModal
+          ticket={inspectingTicket}
+          cities={game.boardState.cities}
+          routes={game.boardState.routes}
+          claimedRoutes={localPlayer?.claimedRoutes || []}
+          onClose={() => setInspectingTicket(null)}
+        />
+      )}
+
       {/* Compact Turn Tracker */}
       <PlayerStatus
         game={game}
@@ -471,6 +485,7 @@ export const DevGameView: React.FC = () => {
               isCurrentTurn={isLocalTurn}
               selectedColor={selectedCardColor}
               onSelectColor={setSelectedCardColor}
+              onInspectTicket={(ticket) => setInspectingTicket(ticket)}
             />
           )}
         </div>

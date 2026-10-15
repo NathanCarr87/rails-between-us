@@ -11,6 +11,7 @@ export interface PlayerHandProps {
   isCurrentTurn?: boolean;
   selectedColor?: CardColor;
   onSelectColor?: (color: CardColor) => void;
+  onInspectTicket?: (ticket: DestinationTicket) => void;
 }
 
 const COLOR_MAP: Record<CardColor, { bg: string; text: string; label: string }> = {
@@ -46,6 +47,7 @@ export const PlayerHand: React.FC<PlayerHandProps> = ({
   isCurrentTurn = false,
   selectedColor,
   onSelectColor,
+  onInspectTicket,
 }) => {
   // Count cards by color
   const counts: Record<CardColor, number> = {
@@ -126,8 +128,19 @@ export const PlayerHand: React.FC<PlayerHandProps> = ({
                     ...styles.ticketRow,
                     borderColor: completed ? '#38a169' : '#e2e8f0',
                     backgroundColor: completed ? '#f0fff4' : '#f7fafc',
+                    cursor: onInspectTicket ? 'pointer' : 'default',
                   }}
+                  onClick={() => onInspectTicket?.(ticket)}
                   data-testid={`kept-ticket-${ticket.id}`}
+                  role={onInspectTicket ? 'button' : undefined}
+                  tabIndex={onInspectTicket ? 0 : undefined}
+                  onKeyDown={(e) => {
+                    if (onInspectTicket && (e.key === 'Enter' || e.key === ' ')) {
+                      e.preventDefault();
+                      onInspectTicket(ticket);
+                    }
+                  }}
+                  title="Click to inspect ticket details"
                 >
                   <div style={styles.ticketInfo}>
                     <span style={styles.ticketRoute}>
@@ -135,15 +148,18 @@ export const PlayerHand: React.FC<PlayerHandProps> = ({
                     </span>
                     <span style={styles.ticketPoints}>{ticket.points} pts</span>
                   </div>
-                  <span
-                    style={{
-                      ...styles.statusBadge,
-                      backgroundColor: completed ? '#c6f6d5' : '#edf2f7',
-                      color: completed ? '#22543d' : '#4a5568',
-                    }}
-                  >
-                    {completed ? '✓ Done' : 'Incomplete'}
-                  </span>
+                  <div style={styles.statusGroup}>
+                    <span
+                      style={{
+                        ...styles.statusBadge,
+                        backgroundColor: completed ? '#c6f6d5' : '#edf2f7',
+                        color: completed ? '#22543d' : '#4a5568',
+                      }}
+                    >
+                      {completed ? '✓ Done' : 'Incomplete'}
+                    </span>
+                    {onInspectTicket && <span style={styles.inspectHint}>🔍</span>}
+                  </div>
                 </div>
               );
             })}
@@ -252,6 +268,7 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: '8px',
+    transition: 'background-color 0.15s ease, border-color 0.15s ease',
   },
   ticketInfo: {
     display: 'flex',
@@ -273,11 +290,21 @@ const styles: Record<string, React.CSSProperties> = {
     color: '#2b6cb0',
     flexShrink: 0,
   },
+  statusGroup: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '4px',
+    flexShrink: 0,
+  },
   statusBadge: {
     fontSize: '10px',
     fontWeight: 'bold',
     padding: '2px 6px',
     borderRadius: '4px',
     flexShrink: 0,
+  },
+  inspectHint: {
+    fontSize: '11px',
+    opacity: 0.7,
   },
 };
