@@ -284,5 +284,17 @@ describe('DevGameView Full Flow Integration', () => {
     const inGameContainer = await screen.findByTestId('in-game-container');
     expect(inGameContainer).toBeDefined();
     expect(screen.queryByTestId('route-select-dropdown')).toBeNull();
+
+    // Verify removed cards are not present
+    expect(screen.queryByText('Route Claim Settings')).toBeNull();
+    expect(screen.queryByText('Game Status')).toBeNull();
+
+    // Verify Leave Game button is rendered in the top header
+    const leaveBtn = screen.getByTestId('leave-game-btn');
+    expect(leaveBtn).toBeDefined();
+
+    // Clicking Leave Game returns to setup container
+    fireEvent.click(leaveBtn);
+    expect(screen.getByTestId('lobby-setup-container')).toBeDefined();
   });
 });

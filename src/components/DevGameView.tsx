@@ -364,15 +364,21 @@ export const DevGameView: React.FC = () => {
     );
   }
 
-  const currentPlayer = game.currentPlayerId ? game.players[game.currentPlayerId] : null;
   const localPlayer = localPlayerId ? game.players[localPlayerId] : null;
   const isLocalTurn = game.currentPlayerId === localPlayerId;
 
   return (
     <div style={styles.container} data-testid="in-game-container">
       <header style={styles.header}>
-        <h1 style={styles.title}>Rails Between Us</h1>
-        <p style={styles.subtitle}>USA Game Board — In-Game ({game.gameId})</p>
+        <div style={styles.headerContent}>
+          <div>
+            <h1 style={styles.title}>Rails Between Us</h1>
+            <p style={styles.subtitle}>USA Game Board — In-Game ({game.gameId})</p>
+          </div>
+          <button style={styles.btnDangerHeader} onClick={handleLeaveGame} data-testid="leave-game-btn">
+            Leave Game
+          </button>
+        </div>
       </header>
 
       {errorMessage && (
@@ -410,6 +416,24 @@ export const DevGameView: React.FC = () => {
         onDrawDestinationTickets={game.phase === 'playing' ? handleDrawDestinationTickets : undefined}
       />
 
+      {/* Main Game Board */}
+      <section style={styles.boardCard}>
+        <GameBoard
+          boardState={game.boardState}
+          players={game.players}
+          selectedRouteId={selectedRouteId}
+          onSelectRoute={(routeId) => {
+            if (game.phase === 'finished') return;
+            setErrorMessage(null);
+            setSelectedRouteId(routeId);
+          }}
+          onClaimRoute={(routeId) => {
+            if (game.phase === 'finished') return;
+            handleClaimRoute(routeId);
+          }}
+        />
+      </section>
+
       {/* Prominent 5 Face-Up Cards and Deck Display */}
       {game.phase === 'playing' && (
         <FaceUpCards
@@ -436,75 +460,6 @@ export const DevGameView: React.FC = () => {
           onSelectColor={setSelectedCardColor}
         />
       )}
-
-      {/* Main Game Board */}
-      <section style={styles.boardCard}>
-        <GameBoard
-          boardState={game.boardState}
-          players={game.players}
-          selectedRouteId={selectedRouteId}
-          onSelectRoute={(routeId) => {
-            if (game.phase === 'finished') return;
-            setErrorMessage(null);
-            setSelectedRouteId(routeId);
-          }}
-          onClaimRoute={(routeId) => {
-            if (game.phase === 'finished') return;
-            handleClaimRoute(routeId);
-          }}
-        />
-      </section>
-
-      {/* Control Panel / Actions */}
-      {game.phase === 'playing' && (
-        <div style={styles.controlGrid}>
-        {/* Controls / Turn Info */}
-        <section style={styles.card}>
-          <h3>Game Status</h3>
-          <p style={styles.mutedText}>
-            Active Player:{' '}
-            <strong>{currentPlayer ? currentPlayer.displayName : 'None'}</strong>
-            {isLocalTurn ? ' (It is your turn!)' : ' (Waiting for player...)'}
-          </p>
-
-          <div style={styles.btnRow}>
-            <button style={styles.btnDanger} onClick={handleLeaveGame}>
-              Leave Game / Return to Lobby
-            </button>
-          </div>
-        </section>
-
-        {/* Payment Card Color Selection for Board Route Claiming */}
-        <section style={styles.card}>
-          <h3>Route Claim Settings</h3>
-          {currentPlayer ? (
-            <div style={styles.actionBox}>
-              <div style={styles.formGroup}>
-                <label>Card Color to Pay for 'Any' Color Routes: </label>
-                <select
-                  value={selectedCardColor}
-                  onChange={(e) => setSelectedCardColor(e.target.value as CardColor)}
-                  style={styles.select}
-                >
-                  {['red', 'blue', 'green', 'yellow', 'purple', 'orange', 'black', 'white'].map(
-                    (col) => (
-                      <option key={col} value={col}>
-                        {col}
-                      </option>
-                    )
-                  )}
-                </select>
-              </div>
-              <p style={styles.mutedText}>
-                Click routes directly on the board to claim them.
-              </p>
-            </div>
-          ) : (
-            <p style={styles.mutedText}>No active player.</p>
-          )}
-        </section>
-      </div>
-      )}
     </div>
   );
 };
@@ -524,7 +479,14 @@ const styles: Record<string, React.CSSProperties> = {
     gap: '16px',
   },
   header: {
-    textAlign: 'center',
+    width: '100%',
+  },
+  headerContent: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: '12px',
   },
   title: {
     fontSize: '26px',
@@ -535,6 +497,17 @@ const styles: Record<string, React.CSSProperties> = {
     margin: 0,
     fontSize: '14px',
     color: '#718096',
+  },
+  btnDangerHeader: {
+    padding: '8px 14px',
+    backgroundColor: '#e53e3e',
+    color: '#ffffff',
+    border: 'none',
+    borderRadius: '8px',
+    fontWeight: 'bold',
+    fontSize: '13px',
+    cursor: 'pointer',
+    flexShrink: 0,
   },
   errorBox: {
     backgroundColor: '#fed7d7',
@@ -557,61 +530,5 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: '12px',
     padding: '12px',
     boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-  },
-  controlGrid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
-    gap: '16px',
-  },
-  card: {
-    backgroundColor: '#ffffff',
-    borderRadius: '12px',
-    padding: '16px',
-    boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-  },
-  btnRow: {
-    display: 'flex',
-    gap: '8px',
-    marginTop: '12px',
-  },
-  btnPrimary: {
-    flex: 1,
-    padding: '10px',
-    backgroundColor: '#3182ce',
-    color: '#ffffff',
-    border: 'none',
-    borderRadius: '8px',
-    fontWeight: 'bold',
-    cursor: 'pointer',
-  },
-  btnDanger: {
-    padding: '10px 16px',
-    backgroundColor: '#e53e3e',
-    color: '#ffffff',
-    border: 'none',
-    borderRadius: '8px',
-    fontWeight: 'bold',
-    cursor: 'pointer',
-  },
-  actionBox: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '12px',
-  },
-  formGroup: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '4px',
-    fontSize: '14px',
-  },
-  select: {
-    padding: '8px',
-    borderRadius: '8px',
-    border: '1px solid #cbd5e0',
-    fontSize: '14px',
-  },
-  mutedText: {
-    color: '#718096',
-    fontSize: '14px',
   },
 };
