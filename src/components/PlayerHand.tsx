@@ -74,7 +74,7 @@ export const PlayerHand: React.FC<PlayerHandProps> = ({
       </div>
 
       {cards.length === 0 ? (
-        <p style={styles.emptyText}>You have no train cards in hand. Draw cards on your turn!</p>
+        <p style={styles.emptyText}>You have no train cards in hand.</p>
       ) : (
         <div style={styles.cardGrid}>
           {ALL_COLORS.map((col) => {
@@ -91,9 +91,10 @@ export const PlayerHand: React.FC<PlayerHandProps> = ({
                   ...styles.cardBadge,
                   background: colorMeta.bg,
                   color: colorMeta.text,
-                  border: isSelected ? '3px solid #2b6cb0' : '1px solid #cbd5e0',
-                  opacity: count === 0 ? 0.4 : 1,
+                  border: isSelected ? '2px solid #2b6cb0' : '1px solid rgba(0,0,0,0.15)',
+                  opacity: count === 0 ? 0.35 : 1,
                   cursor: onSelectColor ? 'pointer' : 'default',
+                  boxShadow: isSelected ? '0 0 0 2px #3182ce' : '0 1px 2px rgba(0,0,0,0.1)',
                 }}
                 onClick={() => onSelectColor && onSelectColor(col)}
                 data-testid={`hand-card-${col}`}
@@ -110,7 +111,7 @@ export const PlayerHand: React.FC<PlayerHandProps> = ({
       <div style={styles.ticketsSection} data-testid="player-tickets-section">
         <h4 style={styles.subTitle}>Your Destination Tickets ({destinationTickets.length})</h4>
         {destinationTickets.length === 0 ? (
-          <p style={styles.emptyText}>You have no active destination tickets.</p>
+          <p style={styles.emptyText}>No destination tickets held.</p>
         ) : (
           <div style={styles.ticketGrid}>
             {destinationTickets.map((ticket) => {
@@ -122,26 +123,26 @@ export const PlayerHand: React.FC<PlayerHandProps> = ({
                 <div
                   key={ticket.id}
                   style={{
-                    ...styles.ticketBadge,
-                    borderColor: completed ? '#38a169' : '#cbd5e0',
+                    ...styles.ticketRow,
+                    borderColor: completed ? '#38a169' : '#e2e8f0',
                     backgroundColor: completed ? '#f0fff4' : '#f7fafc',
                   }}
                   data-testid={`kept-ticket-${ticket.id}`}
                 >
-                  <div style={styles.ticketHeader}>
+                  <div style={styles.ticketInfo}>
                     <span style={styles.ticketRoute}>
-                      <strong>{cityAName}</strong> ➔ <strong>{cityBName}</strong>
+                      {cityAName} ➔ {cityBName}
                     </span>
                     <span style={styles.ticketPoints}>{ticket.points} pts</span>
                   </div>
                   <span
                     style={{
                       ...styles.statusBadge,
-                      backgroundColor: completed ? '#c6f6d5' : '#e2e8f0',
+                      backgroundColor: completed ? '#c6f6d5' : '#edf2f7',
                       color: completed ? '#22543d' : '#4a5568',
                     }}
                   >
-                    {completed ? '✓ Completed' : 'Incomplete'}
+                    {completed ? '✓ Done' : 'Incomplete'}
                   </span>
                 </div>
               );
@@ -156,108 +157,127 @@ export const PlayerHand: React.FC<PlayerHandProps> = ({
 const styles: Record<string, React.CSSProperties> = {
   container: {
     backgroundColor: '#ffffff',
-    borderRadius: '12px',
-    padding: '16px',
-    boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+    borderRadius: '10px',
+    padding: '10px 12px',
+    boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
     display: 'flex',
     flexDirection: 'column',
-    gap: '12px',
+    gap: '8px',
+    border: '1px solid #e2e8f0',
   },
   header: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
+  titleRow: {
+    display: 'flex',
+    alignItems: 'baseline',
+    gap: '6px',
+  },
   title: {
     margin: 0,
-    fontSize: '18px',
+    fontSize: '14px',
+    fontWeight: 'bold',
     color: '#2d3748',
   },
-  yourTurnBadge: {
+  cardCountText: {
     fontSize: '12px',
+    color: '#718096',
+  },
+  yourTurnBadge: {
+    fontSize: '11px',
     fontWeight: 'bold',
     backgroundColor: '#38a169',
     color: '#ffffff',
-    padding: '4px 10px',
-    borderRadius: '12px',
+    padding: '2px 8px',
+    borderRadius: '10px',
   },
   emptyText: {
     margin: 0,
     color: '#718096',
-    fontSize: '14px',
+    fontSize: '12px',
   },
   cardGrid: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fill, minmax(110px, 1fr))',
-    gap: '10px',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(70px, 1fr))',
+    gap: '6px',
   },
   cardBadge: {
-    padding: '10px 12px',
-    borderRadius: '8px',
+    padding: '6px 4px',
+    borderRadius: '6px',
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: '4px',
-    boxShadow: '0 1px 2px rgba(0,0,0,0.15)',
-    transition: 'transform 0.1s ease',
+    gap: '2px',
+    minHeight: '48px',
+    boxSizing: 'border-box',
   },
   cardLabel: {
-    fontSize: '12px',
+    fontSize: '11px',
     fontWeight: 'bold',
     textAlign: 'center',
+    lineHeight: 1.1,
   },
   cardCount: {
-    fontSize: '20px',
+    fontSize: '15px',
     fontWeight: '800',
+    lineHeight: 1,
   },
   ticketsSection: {
-    marginTop: '12px',
-    paddingTop: '12px',
-    borderTop: '1px solid #e2e8f0',
+    marginTop: '6px',
+    paddingTop: '8px',
+    borderTop: '1px solid #edf2f7',
     display: 'flex',
     flexDirection: 'column',
-    gap: '8px',
+    gap: '6px',
   },
   subTitle: {
     margin: 0,
-    fontSize: '15px',
+    fontSize: '13px',
+    fontWeight: 'bold',
     color: '#2d3748',
   },
   ticketGrid: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
-    gap: '10px',
-  },
-  ticketBadge: {
-    padding: '10px 12px',
-    borderRadius: '8px',
-    border: '1px solid',
-    display: 'flex',
-    flexDirection: 'column',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
     gap: '6px',
-    boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
   },
-  ticketHeader: {
+  ticketRow: {
+    padding: '6px 8px',
+    borderRadius: '6px',
+    border: '1px solid',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: '8px',
+  },
+  ticketInfo: {
+    display: 'flex',
+    alignItems: 'baseline',
     gap: '6px',
+    minWidth: 0,
   },
   ticketRoute: {
-    fontSize: '13px',
+    fontSize: '12px',
+    fontWeight: '600',
     color: '#2d3748',
+    whiteSpace: 'nowrap',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
   },
   ticketPoints: {
     fontWeight: 'bold',
-    fontSize: '12px',
+    fontSize: '11px',
     color: '#2b6cb0',
+    flexShrink: 0,
   },
   statusBadge: {
-    alignSelf: 'flex-start',
-    fontSize: '11px',
-    fontWeight: '600',
+    fontSize: '10px',
+    fontWeight: 'bold',
     padding: '2px 6px',
     borderRadius: '4px',
+    flexShrink: 0,
   },
 };

@@ -39,18 +39,21 @@ export const FaceUpCards: React.FC<FaceUpCardsProps> = ({
   return (
     <div style={styles.container} data-testid="face-up-cards-container">
       <div style={styles.header}>
-        <h3 style={styles.title}>Train Car Card Display</h3>
+        <div style={styles.titleRow}>
+          <h3 style={styles.title}>Card Display</h3>
+          <span style={styles.secondaryCountText}>({deckCount} deck / {discardCount} discard)</span>
+        </div>
         {isCurrentTurn ? (
           <span style={styles.drawStatusBadge} data-testid="draw-status-badge">
-            {cardsDrawnThisTurn === 1 ? 'Select 2nd Card' : 'Your Turn to Draw'}
+            {cardsDrawnThisTurn === 1 ? 'Select 2nd Card' : 'Your Turn'}
           </span>
         ) : (
-          <span style={styles.waitingBadge}>Waiting for Turn</span>
+          <span style={styles.waitingBadge}>Waiting</span>
         )}
       </div>
 
       <div style={styles.cardRow}>
-        {/* Blind Draw Deck Card */}
+        {/* Compact Blind Draw Deck Tile */}
         <button
           style={{
             ...styles.deckCard,
@@ -62,9 +65,9 @@ export const FaceUpCards: React.FC<FaceUpCardsProps> = ({
           data-testid="draw-deck-btn"
           title="Draw blind card from deck"
         >
+          <span style={styles.deckIcon}>🎴</span>
           <span style={styles.deckTitle}>Draw Deck</span>
-          <span style={styles.deckCount}>{deckCount} cards</span>
-          <span style={styles.deckSub}>Blind Draw</span>
+          <span style={styles.deckCountBadge}>{deckCount}</span>
         </button>
 
         {/* 5 Face-up Cards */}
@@ -83,7 +86,7 @@ export const FaceUpCards: React.FC<FaceUpCardsProps> = ({
                 color: colorMeta.text,
                 opacity: canClick ? 1 : 0.5,
                 cursor: canClick ? 'pointer' : 'not-allowed',
-                border: isLoco ? '3px solid #f6e05e' : '2px solid #cbd5e0',
+                border: isLoco ? '2px solid #f6e05e' : '1px solid rgba(0,0,0,0.15)',
               }}
               onClick={() => canClick && onDrawFaceUpCard?.(index)}
               disabled={!canClick}
@@ -96,17 +99,16 @@ export const FaceUpCards: React.FC<FaceUpCardsProps> = ({
                   : `Take ${colorMeta.label} card`
               }
             >
-              {isLoco && <span style={styles.wildBanner}>★ WILD ★</span>}
-              <span style={styles.cardName}>{colorMeta.label}</span>
-              <span style={styles.cardIndex}>#{index + 1}</span>
+              {isLoco && <span style={styles.wildBanner}>WILD</span>}
+              <span style={styles.cardName}>{colorMeta.label.split(' ')[0]}</span>
             </button>
           );
         })}
 
-        {/* Discard Pile Badge */}
-        <div style={styles.discardCard} data-testid="discard-pile-info">
-          <span style={styles.discardTitle}>Discard Pile</span>
-          <span style={styles.discardCount}>{discardCount} cards</span>
+        {/* Compact Discard Pile Info Tile */}
+        <div style={styles.discardCard} data-testid="discard-pile-info" title="Discard pile count">
+          <span style={styles.discardTitle}>Discard</span>
+          <span style={styles.discardCount}>{discardCount}</span>
         </div>
       </div>
     </div>
@@ -116,121 +118,134 @@ export const FaceUpCards: React.FC<FaceUpCardsProps> = ({
 const styles: Record<string, React.CSSProperties> = {
   container: {
     backgroundColor: '#ffffff',
-    borderRadius: '12px',
-    padding: '16px',
-    boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+    borderRadius: '10px',
+    padding: '10px 12px',
+    boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
     display: 'flex',
     flexDirection: 'column',
-    gap: '12px',
+    gap: '8px',
+    border: '1px solid #e2e8f0',
   },
   header: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: '8px',
+  },
+  titleRow: {
+    display: 'flex',
+    alignItems: 'baseline',
+    gap: '6px',
   },
   title: {
     margin: 0,
-    fontSize: '18px',
+    fontSize: '14px',
+    fontWeight: 'bold',
     color: '#2d3748',
   },
+  secondaryCountText: {
+    fontSize: '11px',
+    color: '#718096',
+  },
   drawStatusBadge: {
-    fontSize: '12px',
+    fontSize: '11px',
     fontWeight: 'bold',
     backgroundColor: '#3182ce',
     color: '#ffffff',
-    padding: '4px 10px',
-    borderRadius: '12px',
+    padding: '2px 8px',
+    borderRadius: '10px',
   },
   waitingBadge: {
-    fontSize: '12px',
+    fontSize: '11px',
     color: '#718096',
     backgroundColor: '#edf2f7',
-    padding: '4px 10px',
-    borderRadius: '12px',
+    padding: '2px 8px',
+    borderRadius: '10px',
   },
   cardRow: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))',
-    gap: '10px',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(75px, 1fr))',
+    gap: '6px',
     alignItems: 'stretch',
   },
   deckCard: {
     backgroundColor: '#2b6cb0',
     color: '#ffffff',
-    borderRadius: '10px',
-    padding: '12px 8px',
+    borderRadius: '8px',
+    padding: '8px 4px',
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: '4px',
-    border: '2px solid #2c5282',
-    boxShadow: '0 2px 4px rgba(0,0,0,0.15)',
-    transition: 'transform 0.1s ease',
+    gap: '2px',
+    border: '1px solid #2c5282',
+    boxShadow: '0 1px 2px rgba(0,0,0,0.1)',
+    minHeight: '56px',
+  },
+  deckIcon: {
+    fontSize: '12px',
+    lineHeight: 1,
   },
   deckTitle: {
-    fontSize: '12px',
+    fontSize: '10px',
     fontWeight: 'bold',
     textTransform: 'uppercase',
   },
-  deckCount: {
-    fontSize: '16px',
-    fontWeight: '800',
-  },
-  deckSub: {
-    fontSize: '10px',
-    opacity: 0.85,
+  deckCountBadge: {
+    fontSize: '11px',
+    fontWeight: 'bold',
+    backgroundColor: 'rgba(255,255,255,0.25)',
+    padding: '1px 6px',
+    borderRadius: '8px',
   },
   faceUpCard: {
-    borderRadius: '10px',
-    padding: '12px 8px',
+    borderRadius: '8px',
+    padding: '8px 4px',
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: '4px',
-    boxShadow: '0 2px 4px rgba(0,0,0,0.15)',
+    gap: '2px',
+    boxShadow: '0 1px 2px rgba(0,0,0,0.12)',
     position: 'relative',
-    minHeight: '80px',
-    transition: 'transform 0.1s ease',
+    minHeight: '56px',
+    minWidth: '50px',
   },
   wildBanner: {
-    fontSize: '10px',
-    fontWeight: '900',
+    fontSize: '9px',
+    fontWeight: 'bold',
     backgroundColor: '#1a202c',
     color: '#f6e05e',
-    padding: '2px 6px',
-    borderRadius: '4px',
-    letterSpacing: '1px',
+    padding: '1px 4px',
+    borderRadius: '3px',
+    letterSpacing: '0.5px',
   },
   cardName: {
-    fontSize: '13px',
+    fontSize: '12px',
     fontWeight: 'bold',
     textAlign: 'center',
   },
-  cardIndex: {
-    fontSize: '11px',
-    opacity: 0.8,
-  },
   discardCard: {
-    backgroundColor: '#edf2f7',
+    backgroundColor: '#f7fafc',
     color: '#4a5568',
-    borderRadius: '10px',
-    padding: '12px 8px',
+    borderRadius: '8px',
+    padding: '8px 4px',
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: '4px',
+    gap: '2px',
     border: '1px dashed #cbd5e0',
+    minHeight: '56px',
   },
   discardTitle: {
-    fontSize: '11px',
+    fontSize: '10px',
     fontWeight: '600',
     color: '#718096',
+    textTransform: 'uppercase',
   },
   discardCount: {
-    fontSize: '15px',
+    fontSize: '12px',
     fontWeight: 'bold',
   },
 };

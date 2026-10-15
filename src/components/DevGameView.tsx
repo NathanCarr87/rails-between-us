@@ -373,7 +373,7 @@ export const DevGameView: React.FC = () => {
         <div style={styles.headerContent}>
           <div>
             <h1 style={styles.title}>Rails Between Us</h1>
-            <p style={styles.subtitle}>USA Game Board — In-Game ({game.gameId})</p>
+            <span style={styles.subtitle}>Game #{game.gameId}</span>
           </div>
           <button style={styles.btnDangerHeader} onClick={handleLeaveGame} data-testid="leave-game-btn">
             Leave Game
@@ -408,67 +408,82 @@ export const DevGameView: React.FC = () => {
           />
         )}
 
-      {/* Status Area */}
+      {/* Compact Turn Tracker */}
       <PlayerStatus
         game={game}
         localPlayerId={localPlayerId}
-        onDrawCards={game.phase === 'playing' ? handleDrawCards : undefined}
-        onDrawDestinationTickets={game.phase === 'playing' ? handleDrawDestinationTickets : undefined}
+        section="tracker"
       />
 
-      {/* Main Game Board */}
-      <section style={styles.boardCard}>
-        <GameBoard
-          boardState={game.boardState}
-          players={game.players}
-          selectedRouteId={selectedRouteId}
-          onSelectRoute={(routeId) => {
-            if (game.phase === 'finished') return;
-            setErrorMessage(null);
-            setSelectedRouteId(routeId);
-          }}
-          onClaimRoute={(routeId) => {
-            if (game.phase === 'finished') return;
-            handleClaimRoute(routeId);
-          }}
-        />
-      </section>
+      {/* Responsive In-Game Layout Grid */}
+      <div className="game-layout">
+        <div className="game-main-col">
+          {/* Main Game Board */}
+          <section style={styles.boardCard}>
+            <GameBoard
+              boardState={game.boardState}
+              players={game.players}
+              selectedRouteId={selectedRouteId}
+              onSelectRoute={(routeId) => {
+                if (game.phase === 'finished') return;
+                setErrorMessage(null);
+                setSelectedRouteId(routeId);
+              }}
+              onClaimRoute={(routeId) => {
+                if (game.phase === 'finished') return;
+                handleClaimRoute(routeId);
+              }}
+            />
+          </section>
 
-      {/* Prominent 5 Face-Up Cards and Deck Display */}
-      {game.phase === 'playing' && (
-        <FaceUpCards
-          faceUpCards={game.faceUpTrainCards || []}
-          deckCount={game.trainCardDeck.length}
-          discardCount={game.trainCardDiscardPile.length}
-          cardsDrawnThisTurn={game.cardsDrawnThisTurn || 0}
-          isCurrentTurn={isLocalTurn}
-          onDrawFaceUpCard={handleDrawFaceUpCard}
-          onDrawDeckCard={handleDrawDeckCard}
-        />
-      )}
+          {/* Compact Player Summaries */}
+          <PlayerStatus
+            game={game}
+            localPlayerId={localPlayerId}
+            onDrawCards={game.phase === 'playing' ? handleDrawCards : undefined}
+            onDrawDestinationTickets={game.phase === 'playing' ? handleDrawDestinationTickets : undefined}
+            section="summaries"
+          />
+        </div>
 
-      {/* Local Player Hand */}
-      {localPlayer && (
-        <PlayerHand
-          cards={localPlayer.trainCards}
-          destinationTickets={localPlayer.destinationTickets}
-          cities={game.boardState.cities}
-          routes={game.boardState.routes}
-          claimedRoutes={localPlayer.claimedRoutes}
-          isCurrentTurn={isLocalTurn}
-          selectedColor={selectedCardColor}
-          onSelectColor={setSelectedCardColor}
-        />
-      )}
+        <div className="game-side-col">
+          {/* Prominent 5 Face-Up Cards and Deck Display */}
+          {game.phase === 'playing' && (
+            <FaceUpCards
+              faceUpCards={game.faceUpTrainCards || []}
+              deckCount={game.trainCardDeck.length}
+              discardCount={game.trainCardDiscardPile.length}
+              cardsDrawnThisTurn={game.cardsDrawnThisTurn || 0}
+              isCurrentTurn={isLocalTurn}
+              onDrawFaceUpCard={handleDrawFaceUpCard}
+              onDrawDeckCard={handleDrawDeckCard}
+            />
+          )}
+
+          {/* Local Player Hand & Tickets */}
+          {localPlayer && (
+            <PlayerHand
+              cards={localPlayer.trainCards}
+              destinationTickets={localPlayer.destinationTickets}
+              cities={game.boardState.cities}
+              routes={game.boardState.routes}
+              claimedRoutes={localPlayer.claimedRoutes}
+              isCurrentTurn={isLocalTurn}
+              selectedColor={selectedCardColor}
+              onSelectColor={setSelectedCardColor}
+            />
+          )}
+        </div>
+      </div>
     </div>
   );
 };
 
 const styles: Record<string, React.CSSProperties> = {
   container: {
-    maxWidth: '1100px',
+    maxWidth: '1280px',
     margin: '0 auto',
-    padding: '16px',
+    padding: '10px 12px',
     fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
     color: '#2d3748',
     backgroundColor: '#f7fafc',
@@ -476,7 +491,7 @@ const styles: Record<string, React.CSSProperties> = {
     boxSizing: 'border-box',
     display: 'flex',
     flexDirection: 'column',
-    gap: '16px',
+    gap: '10px',
   },
   header: {
     width: '100%',
@@ -485,50 +500,54 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    flexWrap: 'wrap',
     gap: '12px',
   },
   title: {
-    fontSize: '26px',
-    margin: '0 0 4px 0',
+    fontSize: '18px',
+    fontWeight: 'bold',
+    margin: 0,
     color: '#1a202c',
+    display: 'inline-block',
+    marginRight: '8px',
   },
   subtitle: {
     margin: 0,
-    fontSize: '14px',
+    fontSize: '12px',
     color: '#718096',
   },
   btnDangerHeader: {
-    padding: '8px 14px',
+    padding: '5px 10px',
     backgroundColor: '#e53e3e',
     color: '#ffffff',
     border: 'none',
-    borderRadius: '8px',
+    borderRadius: '6px',
     fontWeight: 'bold',
-    fontSize: '13px',
+    fontSize: '12px',
     cursor: 'pointer',
     flexShrink: 0,
   },
   errorBox: {
     backgroundColor: '#fed7d7',
     color: '#9b2c2c',
-    padding: '12px 16px',
-    borderRadius: '8px',
+    padding: '8px 12px',
+    borderRadius: '6px',
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
+    fontSize: '13px',
   },
   closeBtn: {
     background: 'none',
     border: 'none',
     color: '#9b2c2c',
-    fontSize: '16px',
+    fontSize: '14px',
     cursor: 'pointer',
   },
   boardCard: {
     backgroundColor: '#ffffff',
-    borderRadius: '12px',
-    padding: '12px',
-    boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+    borderRadius: '10px',
+    padding: '4px',
+    boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
+    border: '1px solid #e2e8f0',
   },
 };
