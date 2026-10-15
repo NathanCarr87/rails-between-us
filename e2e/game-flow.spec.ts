@@ -598,4 +598,122 @@ test.describe('Rails Between Us - E2E Multiplayer Gameplay Suite', () => {
     const firstRow = page.locator('tr[data-testid^="player-score-row-"]').first();
     await expect(firstRow).toContainText('Alice');
   });
+
+  test('9. Map Zoom Controls - verify default zoom, zoom in, zoom out, and reset', async ({ context }) => {
+    const gameId = `e2e_zoom_${Date.now()}`;
+
+    const page1 = await context.newPage();
+    const page2 = await context.newPage();
+
+    try {
+      await page1.goto('/');
+      await page1.getByTestId('player-name-input').fill('Alice');
+      await page1.getByTestId('game-id-input').fill(gameId);
+      await page1.getByTestId('color-swatch-#e53e3e').click();
+      await page1.getByTestId('create-game-btn').click();
+      await expect(page1.getByTestId('lobby-active-container')).toBeVisible();
+
+      await page2.addInitScript(() => {
+        localStorage.removeItem('rails_last_game_id');
+        const keys = Object.keys(localStorage).filter((k) => k.startsWith('rails_session_'));
+        keys.forEach((k) => localStorage.removeItem(k));
+      });
+      await page2.goto('/');
+      await expect(page2.getByTestId('lobby-setup-container')).toBeVisible();
+      await page2.getByTestId('player-name-input').fill('Bob');
+      await page2.getByTestId('game-id-input').fill(gameId);
+      await page2.getByTestId('color-swatch-#3182ce').click();
+      await page2.getByTestId('join-game-btn').click();
+
+      await expect(page1.getByTestId('lobby-active-container')).toBeVisible();
+      await expect(page2.getByTestId('lobby-active-container')).toBeVisible();
+
+      await page1.getByTestId('start-game-btn').click();
+      await expect(page1.getByTestId('in-game-container')).toBeVisible();
+
+      // Confirm tickets to clear ticket modal
+      await page1.getByTestId('confirm-tickets-btn').click();
+
+      // Zoom controls should be visible
+      await expect(page1.getByTestId('map-zoom-controls')).toBeVisible();
+      await expect(page1.getByTestId('map-zoom-in')).toBeVisible();
+      await expect(page1.getByTestId('map-zoom-out')).toBeVisible();
+      await expect(page1.getByTestId('map-zoom-reset')).toBeVisible();
+
+      const svg = page1.locator('[data-testid="game-board-wrapper"] svg').first();
+      const initialViewBox = await svg.getAttribute('viewBox');
+      expect(initialViewBox).toBe('100 67 800 536');
+
+      // Click Zoom In
+      await page1.getByTestId('map-zoom-in').click();
+      const zoomedInViewBox = await svg.getAttribute('viewBox');
+      expect(zoomedInViewBox).not.toBe(initialViewBox);
+
+      // Click Reset
+      await page1.getByTestId('map-zoom-reset').click();
+      const resetViewBox = await svg.getAttribute('viewBox');
+      expect(resetViewBox).toBe('100 67 800 536');
+    } finally {
+      await page1.close();
+      await page2.close();
+    }
+  });
+
+  test('10. Destination Ticket Modal - inspect kept ticket details and close modal', async ({ context }) => {
+    const gameId = `e2e_ticket_modal_${Date.now()}`;
+
+    const page1 = await context.newPage();
+    const page2 = await context.newPage();
+
+    try {
+      await page1.goto('/');
+      await page1.getByTestId('player-name-input').fill('Alice');
+      await page1.getByTestId('game-id-input').fill(gameId);
+      await page1.getByTestId('color-swatch-#e53e3e').click();
+      await page1.getByTestId('create-game-btn').click();
+      await expect(page1.getByTestId('lobby-active-container')).toBeVisible();
+
+      await page2.addInitScript(() => {
+        localStorage.removeItem('rails_last_game_id');
+        const keys = Object.keys(localStorage).filter((k) => k.startsWith('rails_session_'));
+        keys.forEach((k) => localStorage.removeItem(k));
+      });
+      await page2.goto('/');
+      await expect(page2.getByTestId('lobby-setup-container')).toBeVisible();
+      await page2.getByTestId('player-name-input').fill('Bob');
+      await page2.getByTestId('game-id-input').fill(gameId);
+      await page2.getByTestId('color-swatch-#3182ce').click();
+      await page2.getByTestId('join-game-btn').click();
+
+      await expect(page1.getByTestId('lobby-active-container')).toBeVisible();
+      await expect(page2.getByTestId('lobby-active-container')).toBeVisible();
+
+      await page1.getByTestId('start-game-btn').click();
+      await expect(page1.getByTestId('in-game-container')).toBeVisible();
+
+      // Confirm initial 3 tickets selection
+      await page1.getByTestId('confirm-tickets-btn').click();
+
+      // Verify player has 3 destination tickets in hand
+      await expect(page1.getByTestId('player-tickets-section')).toContainText('Your Destination Tickets (3)');
+
+      // Click the first kept destination ticket in hand
+      const firstTicketRow = page1.locator('[data-testid^="kept-ticket-"]').first();
+      await expect(firstTicketRow).toBeVisible();
+      await firstTicketRow.click();
+
+      // Destination ticket detail inspection modal appears
+      const detailModal = page1.getByTestId('destination-ticket-detail-modal');
+      await expect(detailModal).toBeVisible();
+      await expect(detailModal.getByTestId('ticket-detail-points')).toBeVisible();
+      await expect(detailModal.getByTestId('ticket-detail-status')).toBeVisible();
+
+      // Close the detail modal
+      await page1.getByTestId('close-ticket-detail-btn').click();
+      await expect(detailModal).toBeHidden();
+    } finally {
+      await page1.close();
+      await page2.close();
+    }
+  });
 });
